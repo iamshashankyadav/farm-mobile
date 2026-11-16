@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "scripts": {
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
-    "type-check": "tsc --build --noEmit",
+    "type-check": "tsc --build",
     "gen:api": "openapi-typescript http://localhost/api/v1/openapi.json -o packages/api/src/schema.d.ts",
     "mock": "node packages/api/scripts/mock.js",
     "format": "prettier --write ."
@@ -17,7 +17,7 @@
     "eslint-plugin-react": "^7.34.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "prettier": "^3.2.5",
-    "typescript": "^5.4.5"
+    "typescript": "~5.3.3"
   },
   "engines": {
     "node": ">=18",
