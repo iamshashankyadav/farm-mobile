@@ -93,6 +93,9 @@ importers:
 
   apps/delivery:
     dependencies:
+      '@babel/runtime':
+        specifier: ^7.24.0
+        version: 7.29.14
       '@farm/api':
         specifier: workspace:*
         version: link:../../packages/api
@@ -139,6 +142,9 @@ importers:
       '@babel/core':
         specifier: ^7.24.0
         version: 7.29.13(supports-color@9.4.0)
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
       '@types/react':
         specifier: ~18.2.0
         version: 18.2.79
@@ -148,9 +154,15 @@ importers:
 
   packages/api:
     dependencies:
+      expo-secure-store:
+        specifier: ~13.0.2
+        version: 13.0.2(expo@51.0.39(@babel/core@7.29.13(supports-color@9.4.0))(@babel/preset-env@7.29.14(@babel/core@7.29.13(supports-color@9.4.0))(supports-color@9.4.0))(react-native@0.74.0(@babel/core@7.29.13(supports-color@9.4.0))(@babel/preset-env@7.29.14(@babel/core@7.29.13(supports-color@9.4.0))(supports-color@9.4.0))(@types/react@18.2.79)(react@18.2.0)(supports-color@9.4.0))(react@18.2.0)(supports-color@9.4.0))
       openapi-fetch:
         specifier: ^0.9.3
         version: 0.9.8
+      react:
+        specifier: '*'
+        version: 18.2.0
     devDependencies:
       '@stoplight/prism-cli':
         specifier: ^4.11.0
@@ -158,6 +170,9 @@ importers:
       '@types/node':
         specifier: ~18.19.0
         version: 18.19.130
+      '@types/react':
+        specifier: ~18.2.0
+        version: 18.2.79
       openapi-typescript:
         specifier: ^6.7.3
         version: 6.7.6
@@ -167,6 +182,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@farm/api':
+        specifier: workspace:*
+        version: link:../api
       react:
         specifier: '*'
         version: 18.2.0
@@ -177,6 +195,9 @@ importers:
       '@types/react':
         specifier: ~18.2.0
         version: 18.2.79
+      '@types/react-native':
+        specifier: ~0.73.0
+        version: 0.73.0(@babel/core@7.29.13(supports-color@9.4.0))(@babel/preset-env@7.29.14(@babel/core@7.29.13(supports-color@9.4.0))(supports-color@9.4.0))(@types/react@18.2.79)(react@18.2.0)(supports-color@9.4.0)
       typescript:
         specifier: ~5.3.3
         version: 5.3.3
@@ -1479,11 +1500,18 @@ packages:
   '@types/node@18.19.130':
     resolution: {integrity: sha512-GRaXQx6jGfL8sKfaIDD6OupbIHBr9jv7Jnaml9tB7l4v068PAOXqfcujMMo5PhbIs6ggR1XODELqahT2R8v0fg==}
 
+  '@types/node@20.19.43':
+    resolution: {integrity: sha512-6oYBAi5ikg4Pl+kGsoYtawUMBT2zZMCvPNF7pVLnHZfd1zf38DRiWn/gT01RYCdUqkv7Fhr+C9ot4/tb+2sVvA==}
+
   '@types/node@26.6.6':
     resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
 
   '@types/prop-types@15.7.15':
     resolution: {integrity: sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw==}
+
+  '@types/react-native@0.73.0':
+    resolution: {integrity: sha512-6ZRPQrYM72qYKGWidEttRe6M5DZBEV5F+MHMHqd4TTYx0tfkcdrUFGdef6CCxY0jXU7wldvd/zA/b0A/kTeJmA==}
+    deprecated: This is a stub types definition. react-native provides its own type definitions, so you do not need this installed.
 
   '@types/react@18.2.79':
     resolution: {integrity: sha512-RwGAGXPl9kSXwdNTafkOEuFrTBD5SA2B3iEB96xi8+xu5ddUa/cpvyVCSNn+asgLCTHkb5ZxN8gbuibYJi4s1w==}
@@ -2502,6 +2530,11 @@ packages:
         optional: true
       react-native-reanimated:
         optional: true
+
+  expo-secure-store@13.0.2:
+    resolution: {integrity: sha512-3QYgoneo8p8yeeBPBiAfokNNc2xq6+n8+Ob4fAlErEcf4H7Y72LH+K/dx0nQyWau2ZKZUXBxyyfuHFyVKrEVLg==}
+    peerDependencies:
+      expo: '*'
 
   expo-splash-screen@0.27.7:
     resolution: {integrity: sha512-s+eGcG185878nixlrjhhLD6UDYrvoqBUaBkIEozBVWFg3pkdsKpONPiUAco4XR3h7I/9ODq4quN28RJLFO+s0Q==}
@@ -4797,6 +4830,9 @@ packages:
 
   undici-types@5.26.5:
     resolution: {integrity: sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==}
+
+  undici-types@6.21.0:
+    resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
   undici-types@8.9.0:
     resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
@@ -7248,11 +7284,28 @@ snapshots:
     dependencies:
       undici-types: 5.26.5
 
+  '@types/node@20.19.43':
+    dependencies:
+      undici-types: 6.21.0
+
   '@types/node@26.6.6':
     dependencies:
       undici-types: 8.9.0
 
   '@types/prop-types@15.7.15': {}
+
+  '@types/react-native@0.73.0(@babel/core@7.29.13(supports-color@9.4.0))(@babel/preset-env@7.29.14(@babel/core@7.29.13(supports-color@9.4.0))(supports-color@9.4.0))(@types/react@18.2.79)(react@18.2.0)(supports-color@9.4.0)':
+    dependencies:
+      react-native: 0.74.0(@babel/core@7.29.13(supports-color@9.4.0))(@babel/preset-env@7.29.14(@babel/core@7.29.13(supports-color@9.4.0))(supports-color@9.4.0))(@types/react@18.2.79)(react@18.2.0)(supports-color@9.4.0)
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@babel/preset-env'
+      - '@types/react'
+      - bufferutil
+      - encoding
+      - react
+      - supports-color
+      - utf-8-validate
 
   '@types/react@18.2.79':
     dependencies:
@@ -8471,6 +8524,10 @@ snapshots:
       - supports-color
       - typescript
       - webpack
+
+  expo-secure-store@13.0.2(expo@51.0.39(@babel/core@7.29.13(supports-color@9.4.0))(@babel/preset-env@7.29.14(@babel/core@7.29.13(supports-color@9.4.0))(supports-color@9.4.0))(react-native@0.74.0(@babel/core@7.29.13(supports-color@9.4.0))(@babel/preset-env@7.29.14(@babel/core@7.29.13(supports-color@9.4.0))(supports-color@9.4.0))(@types/react@18.2.79)(react@18.2.0)(supports-color@9.4.0))(react@18.2.0)(supports-color@9.4.0)):
+    dependencies:
+      expo: 51.0.39(@babel/core@7.29.13(supports-color@9.4.0))(@babel/preset-env@7.29.14(@babel/core@7.29.13(supports-color@9.4.0))(supports-color@9.4.0))(react-native@0.74.0(@babel/core@7.29.13(supports-color@9.4.0))(@babel/preset-env@7.29.14(@babel/core@7.29.13(supports-color@9.4.0))(supports-color@9.4.0))(@types/react@18.2.79)(react@18.2.0)(supports-color@9.4.0))(react@18.2.0)(supports-color@9.4.0)
 
   expo-splash-screen@0.27.7(expo-modules-autolinking@1.11.3)(expo@51.0.39(@babel/core@7.29.13(supports-color@9.4.0))(@babel/preset-env@7.29.14(@babel/core@7.29.13(supports-color@9.4.0))(supports-color@9.4.0))(react-native@0.74.0(@babel/core@7.29.13(supports-color@9.4.0))(@babel/preset-env@7.29.14(@babel/core@7.29.13(supports-color@9.4.0))(supports-color@9.4.0))(@types/react@18.2.79)(react@18.2.0)(supports-color@9.4.0))(react@18.2.0)(supports-color@9.4.0))(supports-color@9.4.0):
     dependencies:
@@ -11033,6 +11090,8 @@ snapshots:
       which-boxed-primitive: 1.1.1
 
   undici-types@5.26.5: {}
+
+  undici-types@6.21.0: {}
 
   undici-types@8.9.0: {}
 
