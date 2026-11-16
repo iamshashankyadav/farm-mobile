@@ -53,7 +53,7 @@ pnpm mock
 pnpm mock ./openapi.json
 ```
 
-Then set `API_BASE_URL=http://localhost:4010/api/v1` in your `.env`.
+Then set `EXPO_PUBLIC_API_BASE_URL=http://localhost:4010/api/v1` in your `.env`.
 
 ### Generate the API client
 
