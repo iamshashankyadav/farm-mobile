@@ -11,6 +11,9 @@ importers:
 
   .:
     devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
       '@typescript-eslint/eslint-plugin':
         specifier: ^7.0.0
         version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1(supports-color@9.4.0))(supports-color@9.4.0)(typescript@5.3.3))(eslint@8.57.1(supports-color@9.4.0))(supports-color@9.4.0)(typescript@5.3.3)
@@ -38,6 +41,9 @@ importers:
 
   apps/customer:
     dependencies:
+      '@babel/runtime':
+        specifier: ^7.24.0
+        version: 7.29.14
       '@farm/api':
         specifier: workspace:*
         version: link:../../packages/api
@@ -84,6 +90,9 @@ importers:
       '@babel/core':
         specifier: ^7.24.0
         version: 7.29.13(supports-color@9.4.0)
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
       '@types/react':
         specifier: ~18.2.0
         version: 18.2.79
@@ -93,6 +102,9 @@ importers:
 
   apps/delivery:
     dependencies:
+      '@babel/runtime':
+        specifier: ^7.24.0
+        version: 7.29.14
       '@farm/api':
         specifier: workspace:*
         version: link:../../packages/api
@@ -139,6 +151,9 @@ importers:
       '@babel/core':
         specifier: ^7.24.0
         version: 7.29.13(supports-color@9.4.0)
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
       '@types/react':
         specifier: ~18.2.0
         version: 18.2.79
@@ -156,8 +171,8 @@ importers:
         specifier: ^4.11.0
         version: 4.14.1(supports-color@9.4.0)
       '@types/node':
-        specifier: ~18.19.0
-        version: 18.19.130
+        specifier: ^20.0.0
+        version: 20.19.43
       openapi-typescript:
         specifier: ^6.7.3
         version: 6.7.6
@@ -1478,6 +1493,9 @@ packages:
 
   '@types/node@18.19.130':
     resolution: {integrity: sha512-GRaXQx6jGfL8sKfaIDD6OupbIHBr9jv7Jnaml9tB7l4v068PAOXqfcujMMo5PhbIs6ggR1XODELqahT2R8v0fg==}
+
+  '@types/node@20.19.43':
+    resolution: {integrity: sha512-6oYBAi5ikg4Pl+kGsoYtawUMBT2zZMCvPNF7pVLnHZfd1zf38DRiWn/gT01RYCdUqkv7Fhr+C9ot4/tb+2sVvA==}
 
   '@types/node@26.6.6':
     resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
@@ -4798,6 +4816,9 @@ packages:
   undici-types@5.26.5:
     resolution: {integrity: sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==}
 
+  undici-types@6.21.0:
+    resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
+
   undici-types@8.9.0:
     resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
 
@@ -7247,6 +7268,10 @@ snapshots:
   '@types/node@18.19.130':
     dependencies:
       undici-types: 5.26.5
+
+  '@types/node@20.19.43':
+    dependencies:
+      undici-types: 6.21.0
 
   '@types/node@26.6.6':
     dependencies:
@@ -11033,6 +11058,8 @@ snapshots:
       which-boxed-primitive: 1.1.1
 
   undici-types@5.26.5: {}
+
+  undici-types@6.21.0: {}
 
   undici-types@8.9.0: {}
 
