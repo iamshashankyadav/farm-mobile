@@ -8,11 +8,17 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "expo-secure-store": "~13.0.2",
     "openapi-fetch": "^0.9.3"
+  },
+  "peerDependencies": {
+    "react": "*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@stoplight/prism-cli": "^4.11.0",
+    "@types/node": "~18.19.0",
+    "@types/react": "~18.2.0",
     "openapi-typescript": "^6.7.3",
     "typescript": "~5.3.3"
   }
