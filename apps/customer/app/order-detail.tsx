@@ -232,6 +232,13 @@ export default function OrderDetailScreen() {
           )}
         </Card>
 
+        {/* Issue #8: live position and rating live on their own screen */}
+        <Button
+          label="Track delivery and rate"
+          style={{ marginTop: 8 }}
+          onPress={() => router.push({ pathname: '/order-tracking', params: { id: order.orderId } })}
+        />
+
         {/* Help button */}
         <Button
           label="📞  Need Help?"
