@@ -239,6 +239,9 @@ export default function TodaysRouteScreen() {
   const [activeDeliveryStop, setActiveDeliveryStop] = useState<RouteStop | null>(null);
   const [activePickupStop, setActivePickupStop] = useState<RouteStop | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [activeDeliveryStop, setActiveDeliveryStop] = useState<RouteStop | null>(null);
+  const [activePickupStop, setActivePickupStop] = useState<RouteStop | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
 
   // Derived state
   const doneCount = stops.filter(s => s.status === 'done').length;
@@ -277,6 +280,14 @@ export default function TodaysRouteScreen() {
     setSuccessToast('Stop status updated successfully!');
     setTimeout(() => setSuccessToast(null), 3500);
   }, []);
+
+  // Derived state
+  const doneCount = stops.filter(s => s.status === 'done').length;
+  const allDone = doneCount === stops.length;
+  const nextStop = stops.find(s => s.status === 'pending');
+
+  // Issue #7: Background location pings every 30s while route is active
+  const { isTracking, lastPingTime, pingCount, error: trackingError } = useLocationPings(!allDone);
 
   // Guard: must be authenticated delivery partner
   if (isLoading) {
