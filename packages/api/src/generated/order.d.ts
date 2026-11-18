@@ -10,8 +10,25 @@ export interface paths {
     get: operations["health_health_get"];
   };
   "/orders/payments/intent": {
-    /** Create a mock payment intent */
+    /**
+     * Create a mock payment intent
+     * @description kind FULL (default): pay for a checkout; the intent stays PENDING until POST /orders uses it. kind DEPOSIT: pay the deposit of an accepted land reservation (`referenceId` is the reservation id, `amount` must equal its deposit); the mock gateway takes it at once, so `status` in the response is SUCCEEDED (or FAILED for the test amount) and the land service activates the reservation. BALANCE and REFUND are created by the order service.
+     */
     post: operations["create_payment_intent_orders_payments_intent_post"];
+  };
+  "/orders/payments/webhook": {
+    /**
+     * Mock gateway: report the result of a payment intent
+     * @description Called by the (mock) payment gateway, not by an app. Authenticated with the shared secret in the X-Webhook-Secret header. Settles a PENDING DEPOSIT intent; repeating the same result is harmless. Only needed when the deposit was not taken at once.
+     */
+    post: operations["payment_webhook_orders_payments_webhook_post"];
+  };
+  "/orders/harvest": {
+    /**
+     * Customer: choose delivery or buy-back for a graded harvest
+     * @description The harvest order is created when the quality check passes (status PLACED, no option). DELIVERY needs `deliveryAddress` (and optionally `deliveryDate`): the order becomes READY_FOR_DISPATCH and is pooled like any order; the balance (total minus deposit) is charged when it is delivered. BUYBACK: the farmer buys the harvest, the customer is credited and the order is COMPLETED. Repeating the same choice returns the order.
+     */
+    post: operations["choose_harvest_option_orders_harvest_post"];
   };
   "/orders": {
     /**
@@ -46,6 +63,19 @@ export interface paths {
   "/orders/{order_id}/rating": {
     /** Rate a completed order's delivery */
     post: operations["rate_order_orders__order_id__rating_post"];
+  };
+  "/internal/orders/ready-for-dispatch": {
+    /**
+     * Orders logistics can pool (called by the logistics pooling job)
+     * @description Orders in READY_FOR_DISPATCH whose delivery date is `date` or earlier.
+     *
+     * The shape is what the logistics pooling job reads (snake_case keys, not the public camelCase):
+     * `order_id`, `hub_lat`/`hub_lng` (where the farm hands the produce over), `drop_lat`/`drop_lng`
+     * (the customer's address), `weight_kg` and `address`. Once logistics publishes `pool.assigned`
+     * the order moves to POOLED and no longer shows up here.
+     * TODO(M1): `weight_kg` adds up the quantities of all items whatever their unit.
+     */
+    get: operations["ready_for_dispatch_internal_orders_ready_for_dispatch_get"];
   };
 }
 
@@ -173,8 +203,33 @@ export interface components {
       detail?: components["schemas"]["ValidationError"][];
     };
     /**
+     * HarvestOption
+     * @description What a customer does with a graded harvest (HLD section 12).
+     * @enum {string}
+     */
+    HarvestOption: "DELIVERY" | "BUYBACK";
+    /**
+     * HarvestOrderChoice
+     * @description Body of POST /orders/harvest: what to do with the graded harvest of a reservation.
+     */
+    HarvestOrderChoice: {
+      /**
+       * Reservationid
+       * Format: uuid
+       */
+      reservationId: string;
+      option: components["schemas"]["HarvestOption"];
+      /** @description Required for DELIVERY, ignored for BUYBACK */
+      deliveryAddress?: components["schemas"]["DeliveryAddress"] | null;
+      /**
+       * Deliverydate
+       * @description DELIVERY only. Defaults to tomorrow, like checkout.
+       */
+      deliveryDate?: string | null;
+    };
+    /**
      * Order
-     * @description One order per farm, inside a checkout.
+     * @description One order per farm, inside a checkout. A HARVEST order is one order from one reservation.
      */
     Order: {
       /**
@@ -191,9 +246,16 @@ export interface components {
       orderType?: components["schemas"]["OrderType"];
       /**
        * Farmid
-       * Format: uuid
+       * @description Empty on a harvest order
        */
-      farmId: string;
+      farmId?: string | null;
+      /**
+       * Reservationid
+       * @description The land reservation a HARVEST order comes from
+       */
+      reservationId?: string | null;
+      /** @description HARVEST orders: empty until the customer chooses */
+      harvestOption?: components["schemas"]["HarvestOption"] | null;
       status: components["schemas"]["OrderStatus"];
       /** Items */
       items: components["schemas"]["OrderItem"][];
@@ -208,12 +270,10 @@ export interface components {
        * @default INR
        */
       currency?: string;
-      deliveryAddress: components["schemas"]["DeliveryAddress"];
-      /**
-       * Deliverydate
-       * Format: date
-       */
-      deliveryDate: string;
+      /** @description Empty on a harvest order that is not delivered */
+      deliveryAddress?: components["schemas"]["DeliveryAddress"] | null;
+      /** Deliverydate */
+      deliveryDate?: string | null;
       /**
        * Createdat
        * Format: date-time
@@ -244,9 +304,16 @@ export interface components {
       orderType?: components["schemas"]["OrderType"];
       /**
        * Farmid
-       * Format: uuid
+       * @description Empty on a harvest order
        */
-      farmId: string;
+      farmId?: string | null;
+      /**
+       * Reservationid
+       * @description The land reservation a HARVEST order comes from
+       */
+      reservationId?: string | null;
+      /** @description HARVEST orders: empty until the customer chooses */
+      harvestOption?: components["schemas"]["HarvestOption"] | null;
       status: components["schemas"]["OrderStatus"];
       /** Items */
       items: components["schemas"]["OrderItem"][];
@@ -261,12 +328,10 @@ export interface components {
        * @default INR
        */
       currency?: string;
-      deliveryAddress: components["schemas"]["DeliveryAddress"];
-      /**
-       * Deliverydate
-       * Format: date
-       */
-      deliveryDate: string;
+      /** @description Empty on a harvest order that is not delivered */
+      deliveryAddress?: components["schemas"]["DeliveryAddress"] | null;
+      /** Deliverydate */
+      deliveryDate?: string | null;
       /**
        * Createdat
        * Format: date-time
@@ -280,6 +345,17 @@ export interface components {
       /** Events */
       events: components["schemas"]["OrderEvent"][];
       rating?: components["schemas"]["OrderRating"] | null;
+      /**
+       * Payments
+       * @description Payments and refunds of this order, oldest first
+       */
+      payments: components["schemas"]["PaymentRecord"][];
+      /**
+       * Balancedue
+       * @description HARVEST DELIVERY: what is still to be paid, settled when the order completes
+       * @default 0
+       */
+      balanceDue?: number;
     };
     /**
      * OrderEvent
@@ -302,14 +378,14 @@ export interface components {
     OrderItem: {
       /**
        * Listingid
-       * Format: uuid
+       * @description Empty on a harvest order
        */
-      listingId: string;
+      listingId?: string | null;
       /**
        * Farmid
-       * Format: uuid
+       * @description Empty on a harvest order
        */
-      farmId: string;
+      farmId?: string | null;
       /** Name */
       name: string;
       /** Unit */
@@ -393,11 +469,11 @@ export interface components {
       checkoutId: string;
       /** @default PRODUCE */
       orderType?: components["schemas"]["OrderType"];
-      /**
-       * Farmid
-       * Format: uuid
-       */
-      farmId: string;
+      /** Farmid */
+      farmId?: string | null;
+      /** Reservationid */
+      reservationId?: string | null;
+      harvestOption?: components["schemas"]["HarvestOption"] | null;
       status: components["schemas"]["OrderStatus"];
       /** Itemcount */
       itemCount: number;
@@ -428,6 +504,9 @@ export interface components {
     /**
      * PaymentIntent
      * @description A mock payment. In this project it always succeeds unless the amount is a test value.
+     *
+     * A FULL intent stays PENDING until it is used by POST /orders. A DEPOSIT is taken as soon as the
+     * intent is created, so `status` is already SUCCEEDED or FAILED in the response.
      */
     PaymentIntent: {
       /**
@@ -464,15 +543,57 @@ export interface components {
     /**
      * PaymentKind
      * @description What a payment is for (HLD section 10). The land service pays reservation deposits through
-     * this API too. REFUND rows are written by the order service, never requested by a client.
+     * this API too. BALANCE and REFUND rows are written by the order service, never requested by a
+     * client.
      * @enum {string}
      */
     PaymentKind: "FULL" | "DEPOSIT" | "BALANCE" | "REFUND";
+    /**
+     * PaymentRecord
+     * @description A payment or refund that belongs to an order.
+     */
+    PaymentRecord: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      kind: components["schemas"]["PaymentKind"];
+      /** Amount */
+      amount: number;
+      /**
+       * Currency
+       * @default INR
+       */
+      currency?: string;
+      status: components["schemas"]["PaymentStatus"];
+      /**
+       * Createdat
+       * Format: date-time
+       */
+      createdAt: string;
+    };
     /**
      * PaymentStatus
      * @enum {string}
      */
     PaymentStatus: "PENDING" | "SUCCEEDED" | "FAILED" | "REFUNDED";
+    /**
+     * PaymentWebhook
+     * @description Body of POST /orders/payments/webhook: the mock gateway reports the result of an intent.
+     */
+    PaymentWebhook: {
+      /**
+       * Paymentintentid
+       * Format: uuid
+       */
+      paymentIntentId: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "SUCCEEDED" | "FAILED";
+    };
     /** ValidationError */
     ValidationError: {
       /** Location */
@@ -513,7 +634,10 @@ export interface operations {
       };
     };
   };
-  /** Create a mock payment intent */
+  /**
+   * Create a mock payment intent
+   * @description kind FULL (default): pay for a checkout; the intent stays PENDING until POST /orders uses it. kind DEPOSIT: pay the deposit of an accepted land reservation (`referenceId` is the reservation id, `amount` must equal its deposit); the mock gateway takes it at once, so `status` in the response is SUCCEEDED (or FAILED for the test amount) and the land service activates the reservation. BALANCE and REFUND are created by the order service.
+   */
   create_payment_intent_orders_payments_intent_post: {
     requestBody: {
       content: {
@@ -535,6 +659,115 @@ export interface operations {
       };
       /** @description The token does not have the required role */
       403: {
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description RESERVATION_NOT_FOUND (DEPOSIT) */
+      404: {
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description DEPOSIT_ALREADY_PAID or RESERVATION_NOT_PAYABLE (DEPOSIT) */
+      409: {
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description DEPOSIT_AMOUNT_MISMATCH (DEPOSIT) */
+      422: {
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  /**
+   * Mock gateway: report the result of a payment intent
+   * @description Called by the (mock) payment gateway, not by an app. Authenticated with the shared secret in the X-Webhook-Secret header. Settles a PENDING DEPOSIT intent; repeating the same result is harmless. Only needed when the deposit was not taken at once.
+   */
+  payment_webhook_orders_payments_webhook_post: {
+    parameters: {
+      header?: {
+        "X-Webhook-Secret"?: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PaymentWebhook"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PaymentIntent"];
+        };
+      };
+      /** @description INVALID_WEBHOOK_SECRET */
+      401: {
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description PAYMENT_INTENT_NOT_FOUND */
+      404: {
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description PAYMENT_ALREADY_SETTLED, PAYMENT_NOT_SETTLEABLE or DEPOSIT_ALREADY_PAID */
+      409: {
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /**
+   * Customer: choose delivery or buy-back for a graded harvest
+   * @description The harvest order is created when the quality check passes (status PLACED, no option). DELIVERY needs `deliveryAddress` (and optionally `deliveryDate`): the order becomes READY_FOR_DISPATCH and is pooled like any order; the balance (total minus deposit) is charged when it is delivered. BUYBACK: the farmer buys the harvest, the customer is credited and the order is COMPLETED. Repeating the same choice returns the order.
+   */
+  choose_harvest_option_orders_harvest_post: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["HarvestOrderChoice"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": components["schemas"]["OrderDetail"];
+        };
+      };
+      /** @description Missing or invalid access token */
+      401: {
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The token does not have the required role */
+      403: {
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description RESERVATION_NOT_FOUND */
+      404: {
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description HARVEST_NOT_READY, HARVEST_OPTION_CHOSEN or HARVEST_ORDER_CLOSED */
+      409: {
         content: {
           "application/json": components["schemas"]["ErrorResponse"];
         };
@@ -837,6 +1070,40 @@ export interface operations {
       409: {
         content: {
           "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  /**
+   * Orders logistics can pool (called by the logistics pooling job)
+   * @description Orders in READY_FOR_DISPATCH whose delivery date is `date` or earlier.
+   *
+   * The shape is what the logistics pooling job reads (snake_case keys, not the public camelCase):
+   * `order_id`, `hub_lat`/`hub_lng` (where the farm hands the produce over), `drop_lat`/`drop_lng`
+   * (the customer's address), `weight_kg` and `address`. Once logistics publishes `pool.assigned`
+   * the order moves to POOLED and no longer shows up here.
+   * TODO(M1): `weight_kg` adds up the quantities of all items whatever their unit.
+   */
+  ready_for_dispatch_internal_orders_ready_for_dispatch_get: {
+    parameters: {
+      query: {
+        /** @description Pool orders due on or before this day */
+        date: string;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        content: {
+          "application/json": {
+              [key: string]: unknown;
+            }[];
         };
       };
       /** @description Validation Error */
