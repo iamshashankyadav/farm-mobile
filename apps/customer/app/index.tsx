@@ -146,6 +146,15 @@ export default function CustomerHomeScreen() {
             </TouchableOpacity>
           )}
 
+          {/* Team page link */}
+          <TouchableOpacity
+            style={styles.profileButton}
+            accessibilityLabel="Our Team"
+            onPress={() => router.push('/team' as never)}
+          >
+            <RNText style={styles.profileIcon}>👥</RNText>
+          </TouchableOpacity>
+
           {/* User profile / login shortcut */}
           <TouchableOpacity
             style={styles.profileButton}
