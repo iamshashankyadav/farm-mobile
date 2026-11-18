@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Image, TouchableOpacity, ScrollView, Text as RNText } from 'react-native';
+import React from 'react';
+import { useRouter } from 'expo-router';
+import { View, StyleSheet, Image, ScrollView, Text as RNText } from 'react-native';
 import { Card, Text, Button } from '@farm/ui';
 import { formatRupees } from '../../checkout/format.ts';
 import { VerifiedBadge } from '../../browse/components/VerifiedBadge.tsx';
@@ -14,7 +15,7 @@ interface CropTimelineViewProps {
 const ALL_STAGES: CropStage[] = ['SOWN', 'GROWING', 'FLOWERING', 'HARVEST_READY'];
 
 export function CropTimelineView({ reservation, onClose }: CropTimelineViewProps) {
-  const [harvestChoice, setHarvestChoice] = useState<'DELIVERY' | 'BUYBACK' | null>(null);
+  const router = useRouter();
 
   // Find active stage index
   const activeMeta = getStageMetadata(
@@ -109,48 +110,16 @@ export function CropTimelineView({ reservation, onClose }: CropTimelineViewProps
                 Your Crop is Ready for Harvest!
               </Text>
               <Text variant="caption">
-                Quality inspection passed with Grade A. Select your fulfillment preference below:
+                Once the inspection passes, choose how you want to receive it:
               </Text>
             </View>
           </View>
 
-          <View style={styles.choiceRow}>
-            <TouchableOpacity
-              style={[
-                styles.choiceBtn,
-                harvestChoice === 'DELIVERY' && styles.choiceBtnSelected,
-              ]}
-              onPress={() => setHarvestChoice('DELIVERY')}
-            >
-              <RNText style={styles.choiceEmoji}>🚚</RNText>
-              <RNText style={styles.choiceTitle}>Doorstep Delivery</RNText>
-              <RNText style={styles.choiceDesc}>
-                Deliver all {reservation.expectedQtyKg} kg of farm fresh harvest to your home address via pooled delivery.
-              </RNText>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.choiceBtn,
-                harvestChoice === 'BUYBACK' && styles.choiceBtnSelected,
-              ]}
-              onPress={() => setHarvestChoice('BUYBACK')}
-            >
-              <RNText style={styles.choiceEmoji}>💰</RNText>
-              <RNText style={styles.choiceTitle}>Guaranteed Buy-Back</RNText>
-              <RNText style={styles.choiceDesc}>
-                Farmer sells the crop to local agri-markets and deposits the harvest earnings directly into your bank account.
-              </RNText>
-            </TouchableOpacity>
-          </View>
-
-          {harvestChoice && (
-            <View style={styles.choiceConfirmBox}>
-              <RNText style={styles.choiceConfirmText}>
-                ✓ Preference saved: {harvestChoice === 'DELIVERY' ? 'Doorstep Delivery' : 'Guaranteed Buy-Back payout'}. Logistics coordinator notified.
-              </RNText>
-            </View>
-          )}
+          {/* Issue #10: the choice (delivery or buy-back) is made on the harvest screen */}
+          <Button
+            label="Choose delivery or buy-back"
+            onPress={() => router.push({ pathname: '/harvest', params: { reservationId: reservation.id } })}
+          />
         </Card>
       )}
 
