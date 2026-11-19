@@ -36,6 +36,11 @@ export default function OrderPlacedScreen() {
             </Text>
           ))}
           <Text variant="label">Total {formatRupees(order.total)}</Text>
+          <Button
+            label="Track delivery"
+            variant="secondary"
+            onPress={() => router.push({ pathname: '/order-tracking', params: { id: order.id } })}
+          />
         </Card>
       ))}
 

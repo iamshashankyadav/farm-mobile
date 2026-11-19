@@ -28,6 +28,12 @@ export default function DeliveryHomeScreen() {
             style={{ marginTop: 24 }}
             onPress={() => router.push('/login')}
           />
+          <Button
+            label="👥  Meet the Team"
+            variant="ghost"
+            style={{ marginTop: 8 }}
+            onPress={() => router.push('/team')}
+          />
         </Card>
       </View>
     );
@@ -78,8 +84,15 @@ export default function DeliveryHomeScreen() {
         />
 
         <Button
-          label="Log Out"
+          label="👥  Meet the Team"
           variant="secondary"
+          style={{ marginTop: 10 }}
+          onPress={() => router.push('/team')}
+        />
+
+        <Button
+          label="Log Out"
+          variant="ghost"
           style={{ marginTop: 10 }}
           onPress={async () => {
             await logout();
