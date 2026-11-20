@@ -19,5 +19,5 @@ module.exports = {
   settings: {
     react: { version: 'detect' },
   },
-  ignorePatterns: ['node_modules/', 'dist/', '.expo/', 'android/', 'ios/'],
+  ignorePatterns: ['node_modules/', 'dist/', '.expo/', 'android/', 'ios/', 'farm-backend/', 'farm-web/'],
 };

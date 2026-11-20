@@ -2,14 +2,24 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-native",
-    "lib": ["ESNext"],
+    "lib": [
+      "ESNext"
+    ],
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "paths": {
-      "@farm/ui": ["../../packages/ui/src/index.ts"],
-      "@farm/api": ["../../packages/api/src/index.ts"]
+      "@farm/ui": [
+        "../../packages/ui/src/index.ts"
+      ],
+      "@farm/api": [
+        "../../packages/api/src/index.ts"
+      ]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.d.ts", "expo-env.d.ts"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.d.ts"
+  ]
 }
