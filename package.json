@@ -3,6 +3,8 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
+    "start:delivery": "pnpm --filter @farm/delivery start",
+    "start:customer": "pnpm --filter @farm/customer start",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
     "type-check": "tsc --build",
     "test": "node --test packages/api/tests/auth.test.js && pnpm -r --filter ./apps/customer --filter ./apps/delivery test",

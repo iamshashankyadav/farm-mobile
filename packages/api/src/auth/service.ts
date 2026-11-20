@@ -1,18 +1,6 @@
-import { setAuthToken } from '../client';
+import { BASE_URL, setAuthToken } from '../client';
 import { authStorage } from './storage';
 import type { OtpRequestResponse, TokenResponse, User, Role } from '../types/auth';
-
-declare const process: {
-  env?: {
-    API_BASE_URL?: string;
-    EXPO_PUBLIC_API_BASE_URL?: string;
-  };
-};
-
-const BASE_URL =
-  (typeof process !== 'undefined' &&
-    (process.env?.API_BASE_URL || process.env?.EXPO_PUBLIC_API_BASE_URL)) ||
-  'http://localhost/api/v1';
 
 export function normalizePhone(value: string): string {
   const digits = value.replace(/[\s\-()]/g, '');
@@ -65,12 +53,18 @@ async function handleResponse<T>(res: Response): Promise<T> {
 export const authService = {
   async requestOtp(phone: string): Promise<OtpRequestResponse> {
     const normalized = normalizePhone(phone);
-    const res = await fetch(`${BASE_URL}/identity/otp/request`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: normalized }),
-    });
-    return handleResponse<OtpRequestResponse>(res);
+    const url = `${BASE_URL}/identity/otp/request`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalized }),
+      });
+      return await handleResponse<OtpRequestResponse>(res);
+    } catch (err) {
+      console.warn(`[auth] requestOtp failed to ${url}:`, err);
+      throw err;
+    }
   },
 
   async verifyOtp(phone: string, code: string): Promise<TokenResponse> {
