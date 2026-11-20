@@ -33,18 +33,21 @@ export function SharedLoginScreen({
     requestOtp,
     verifyOtp,
     loginWithPassword,
+    register,
     devMockLogin,
     error: authError,
     clearError,
   } = useAuth();
 
-  const [authMode, setAuthMode] = useState<'otp' | 'password'>('otp');
+  const [authMode, setAuthMode] = useState<'otp' | 'password' | 'signup'>('otp');
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
 
   // Form states
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
 
   // UI status
   const [loading, setLoading] = useState(false);
@@ -134,6 +137,46 @@ export function SharedLoginScreen({
     }
   };
 
+  const handleSignUp = async () => {
+    setLocalError(null);
+    clearError();
+    if (name.trim().length < 2) {
+      setLocalError('Please enter your full name.');
+      return;
+    }
+    if (!validatePhone(phone)) {
+      setLocalError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) {
+      setLocalError('Please enter a valid email address or leave it blank.');
+      return;
+    }
+    if (password.length < 6) {
+      setLocalError('Choose a password of at least 6 characters.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const user = await register(
+        {
+          name: name.trim(),
+          phone,
+          password,
+          roles: [requiredRole],
+          ...(email.trim() ? { email: email.trim() } : {}),
+        },
+        requiredRole
+      );
+      onSuccess?.(user);
+    } catch {
+      // Handled by AuthContext
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDevMockLogin = async (roleToUse: Role) => {
     setLocalError(null);
     clearError();
@@ -203,6 +246,18 @@ export function SharedLoginScreen({
             >
               <Text style={[styles.tabText, authMode === 'password' && styles.activeTabText]}>
                 Password
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, authMode === 'signup' && styles.activeTab]}
+              onPress={() => {
+                setAuthMode('signup');
+                setLocalError(null);
+                clearError();
+              }}
+            >
+              <Text style={[styles.tabText, authMode === 'signup' && styles.activeTabText]}>
+                Sign Up
               </Text>
             </TouchableOpacity>
           </View>
@@ -297,6 +352,48 @@ export function SharedLoginScreen({
                 </View>
               </View>
             )
+          ) : authMode === 'signup' ? (
+            <View>
+              <Input
+                label="Full Name"
+                placeholder="Anita Sharma"
+                autoCapitalize="words"
+                value={name}
+                onChangeText={setName}
+              />
+              <Input
+                label="Phone Number"
+                placeholder="98765 43210"
+                prefix="+91"
+                keyboardType="phone-pad"
+                maxLength={10}
+                value={phone}
+                onChangeText={(t) => {
+                  setPhone(t.replace(/[^0-9]/g, ''));
+                  if (localError) setLocalError(null);
+                }}
+              />
+              <Input
+                label="Email (optional)"
+                placeholder="you@example.com"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+              />
+              <Input
+                label="Password"
+                placeholder="At least 6 characters"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
+              <Button
+                label="Create Account"
+                loading={loading}
+                style={styles.actionButton}
+                onPress={handleSignUp}
+              />
+            </View>
           ) : (
             <View>
               <Input

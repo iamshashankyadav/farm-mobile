@@ -4,6 +4,14 @@ import { authStorage } from './storage';
 import { setAuthToken } from '../client';
 import type { User, Role, OtpRequestResponse } from '../types/auth';
 
+export interface RegisterParams {
+  name: string;
+  phone: string;
+  password: string;
+  roles: Role[];
+  email?: string;
+}
+
 export interface AuthContextValue {
   user: User | null;
   accessToken: string | null;
@@ -13,6 +21,7 @@ export interface AuthContextValue {
   requestOtp: (phone: string) => Promise<OtpRequestResponse>;
   verifyOtp: (phone: string, code: string, requiredRole?: Role | Role[]) => Promise<User>;
   loginWithPassword: (phone: string, password: string, requiredRole?: Role | Role[]) => Promise<User>;
+  register: (params: RegisterParams, requiredRole?: Role | Role[]) => Promise<User>;
   logout: () => Promise<void>;
   hasRole: (role: Role) => boolean;
   clearError: () => void;
@@ -164,6 +173,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const register = useCallback(
+    async (params: RegisterParams, requiredRole?: Role | Role[]): Promise<User> => {
+      setError(null);
+      try {
+        await authService.register(params);
+      } catch (err: unknown) {
+        const msg = err instanceof AuthApiError ? err.message : 'Sign up failed. Please check your network.';
+        setError(msg);
+        throw err;
+      }
+      return loginWithPassword(params.phone, params.password, requiredRole);
+    },
+    [loginWithPassword]
+  );
+
   const logout = useCallback(async (): Promise<void> => {
     try {
       await authService.logout();
@@ -216,12 +240,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       requestOtp,
       verifyOtp,
       loginWithPassword,
+      register,
       logout,
       hasRole,
       clearError,
       devMockLogin,
     }),
-    [user, accessToken, isLoading, error, requestOtp, verifyOtp, loginWithPassword, logout, hasRole, clearError, devMockLogin]
+    [user, accessToken, isLoading, error, requestOtp, verifyOtp, loginWithPassword, register, logout, hasRole, clearError, devMockLogin]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

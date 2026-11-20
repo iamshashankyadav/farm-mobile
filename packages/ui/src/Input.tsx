@@ -21,6 +21,7 @@ export interface InputProps {
   disabled?: boolean;
   error?: string | null;
   autoFocus?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   style?: ViewStyle;
   inputStyle?: TextStyle;
 }
@@ -37,6 +38,7 @@ export function Input({
   disabled = false,
   error,
   autoFocus = false,
+  autoCapitalize = 'none',
   style,
   inputStyle,
 }: InputProps) {
@@ -62,7 +64,7 @@ export function Input({
           maxLength={maxLength}
           editable={!disabled}
           autoFocus={autoFocus}
-          autoCapitalize="none"
+          autoCapitalize={autoCapitalize}
         />
       </View>
       {error && <Text style={styles.errorText}>{error}</Text>}
