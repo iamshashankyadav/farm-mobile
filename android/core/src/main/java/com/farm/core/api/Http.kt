@@ -31,7 +31,7 @@ object ApiConfig {
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     }
 
-    /** e.g. http://10.50.7.73/api/v1 (no trailing slash). */
+    /** e.g. http://10.1.75.79:4501/api/v1 (no trailing slash). */
     val baseUrl: String
         get() = (prefs?.getString(KEY_BASE_URL, null) ?: defaultBaseUrl).trimEnd('/')
 
