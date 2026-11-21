@@ -27,7 +27,7 @@ Use your own keystore for a Play Store release.
 
 ## API server
 
-The default gateway is `farmApiBaseUrl` in `gradle.properties` (`http://10.50.7.73/api/v1`).
+The default gateway is `farmApiBaseUrl` in `gradle.properties` (`http://10.1.75.79:4501/api/v1`).
 It can also be changed in the app: login screen → **Server: … → Change**. The phone must be on a network that can reach that address.
 Plain HTTP is allowed (`usesCleartextTraffic`) because the gateway runs without TLS.
 

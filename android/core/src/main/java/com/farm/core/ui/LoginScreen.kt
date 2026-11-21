@@ -312,7 +312,7 @@ private fun ServerAddressEditor() {
             )
         }
     } else {
-        FarmInput(draft, { draft = it }, label = "Server address", placeholder = "http://10.50.7.73/api/v1", keyboardType = KeyboardType.Uri)
+        FarmInput(draft, { draft = it }, label = "Server address", placeholder = "http://10.1.75.79:4501/api/v1", keyboardType = KeyboardType.Uri)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FarmButton("Reset", {
                 ApiConfig.setBaseUrl(null); current = ApiConfig.baseUrl; editing = false

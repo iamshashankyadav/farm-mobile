@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val apiBaseUrl = providers.gradleProperty("farmApiBaseUrl").getOrElse("http://10.50.7.73/api/v1")
+val apiBaseUrl = providers.gradleProperty("farmApiBaseUrl").getOrElse("http://10.1.75.79:4501/api/v1")
 
 android {
     namespace = "com.farm.core"
