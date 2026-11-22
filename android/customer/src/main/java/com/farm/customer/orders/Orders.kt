@@ -9,8 +9,6 @@ import com.farm.core.api.OrderSummary
 import com.farm.core.api.PaymentRecord
 import com.farm.core.api.Track
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import java.text.NumberFormat
 import java.time.Duration
 import java.time.Instant
@@ -159,10 +157,6 @@ fun rupees(amount: Double): String {
 
 fun addressLabel(a: DeliveryAddress?): String? =
     a?.let { listOfNotNull(it.line1, it.line2, it.city, it.pincode).filter(String::isNotEmpty).joinToString(", ") }
-
-/** Notifications about an order carry its id in the payload; tapping one opens that order. */
-fun notificationOrderId(payload: JsonObject?): String? =
-    (payload?.get("orderId") as? JsonPrimitive)?.takeIf { it.isString }?.content?.ifEmpty { null }
 
 fun parseInstant(iso: String): Instant? = runCatching { OffsetDateTime.parse(iso).toInstant() }
     .recoverCatching { Instant.parse(iso) }
