@@ -325,7 +325,7 @@ fun CheckoutScreen(onBack: () -> Unit, onCart: () -> Unit, onLogin: () -> Unit, 
                 SummaryLine("Items", formatRupees(breakdown.items))
                 SummaryLine("Delivery (${breakdown.farms.size} × ${formatRupees(DELIVERY_FEE_PER_ORDER)})", formatRupees(breakdown.delivery))
                 SummaryLine("To pay", formatRupees(breakdown.total), bold = true)
-                FText("This is a test payment: no real money is taken.", variant = TextVariant.Caption, modifier = Modifier.padding(top = 4.dp))
+                FText("Payment is simulated: no real money is taken.", variant = TextVariant.Caption, modifier = Modifier.padding(top = 4.dp))
             }
             FarmCard(Modifier.fillMaxWidth()) {
                 FText("Delivery address", variant = TextVariant.H2, fontSize = 18.sp)
