@@ -30,6 +30,27 @@ Install a debug APK on a connected phone or emulator with `adb install -r <apk>`
 Release APKs are signed with the debug key, so they install directly on any phone (allow "install unknown apps").
 Use your own keystore for a Play Store release.
 
+## Tests
+
+```bash
+./gradlew testDebugUnitTest                 # unit tests (JVM): API layer on MockWebServer, logic
+./gradlew connectedDebugAndroidTest         # on a phone/emulator: Compose UI state tests
+```
+
+- **Unit** (`*/src/test`): the API layer against `MockWebServer` (success, the
+  `{"error":{...}}` envelope, 401 then refresh, no network, 404 meaning "none"), checkout
+  idempotency, route order and summary, order / reservation status mapping, money, distance and
+  rating formatting, reorder, favourites. CI runs them on every PR.
+- **Compose UI** (`core/src/androidTest`): the Loading, Empty and Error states every data screen
+  uses.
+- **End to end** (one per app, `*/src/androidTest/*E2ETest.kt`): the customer places an order;
+  the delivery partner arrives at and completes a pickup. They are skipped unless you pass a
+  backend, and need a freshly seeded demo backend (`scripts/reset-demo.sh` in farm-backend):
+
+  ```bash
+  ./gradlew connectedDebugAndroidTest     -Pandroid.testInstrumentationRunnerArguments.apiBaseUrl=http://10.0.2.2/api/v1
+  ```
+
 ## API server
 
 The apps call the backend gateway, `<server>/api/v1`. The address is set in two places:
