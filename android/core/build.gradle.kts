@@ -41,5 +41,6 @@ dependencies {
     api(libs.coil.compose)
 
     testImplementation(libs.junit)
+    testImplementation(libs.mockwebserver)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

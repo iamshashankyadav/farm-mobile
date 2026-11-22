@@ -10,7 +10,9 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.farm.core.auth.AuthManager
 import com.farm.core.auth.FarmCore
+import com.farm.customer.checkout.CartStore
 import com.farm.core.ui.FarmTheme
 import com.farm.core.ui.SharedLoginScreen
 import com.farm.core.ui.TeamScreen
@@ -31,6 +33,11 @@ class FarmCustomerApp : Application() {
     override fun onCreate() {
         super.onCreate()
         FarmCore.init(this)
+        // Signing out (or a session the server no longer accepts) clears what the app keeps locally.
+        AuthManager.onSignOut {
+            CartStore.clear()
+            CartStore.lastCheckout = null
+        }
     }
 }
 

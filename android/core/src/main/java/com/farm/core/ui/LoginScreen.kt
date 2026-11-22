@@ -41,14 +41,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.farm.core.api.ApiConfig
 import com.farm.core.api.User
+import com.farm.core.api.load
 import com.farm.core.auth.AuthManager
+import com.farm.core.auth.isValidMobile
+import com.farm.core.auth.localMobileDigits
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private enum class AuthMode { Otp, Password, SignUp }
 
-private val PHONE_RE = Regex("^(0|\\+91)?[6-9]\\d{9}$")
-private fun validPhone(raw: String) = PHONE_RE.matches(raw.replace(Regex("[\\s\\-()]"), ""))
+private fun validPhone(raw: String) = isValidMobile(raw)
 
 /** OTP / password / sign-up login shared by both apps. Only accounts with [requiredRole] get in. */
 @Composable
@@ -90,13 +92,9 @@ fun SharedLoginScreen(
     fun run(block: suspend () -> Unit) {
         scope.launch {
             loading = true
-            try {
-                block()
-            } catch (_: Exception) {
-                // the message is in AuthManager.state.error
-            } finally {
-                loading = false
-            }
+            // a failure is already in AuthManager.state (error and per-field messages)
+            load { block() }
+            loading = false
         }
     }
 
@@ -129,8 +127,8 @@ fun SharedLoginScreen(
             localError = "Please enter a valid 10-digit mobile number."
             return
         }
-        if (password.length < 6) {
-            localError = "Please enter your password (minimum 6 characters)."
+        if (password.isEmpty()) {
+            localError = "Please enter your password."
             return
         }
         run { onSuccess(AuthManager.loginWithPassword(phone, password, requiredRole)) }
@@ -144,7 +142,7 @@ fun SharedLoginScreen(
             !validPhone(phone) -> localError = "Please enter a valid 10-digit mobile number."
             cleanEmail.isNotEmpty() && !Regex("^\\S+@\\S+\\.\\S+$").matches(cleanEmail) ->
                 localError = "Please enter a valid email address or leave it blank."
-            password.length < 6 -> localError = "Choose a password of at least 6 characters."
+            password.length < 8 -> localError = "Choose a password of at least 8 characters."
             else -> run {
                 onSuccess(AuthManager.register(name.trim(), phone, password, cleanEmail.ifEmpty { null }, requiredRole))
             }
@@ -152,7 +150,7 @@ fun SharedLoginScreen(
     }
 
     val onPhone: (String) -> Unit = { t ->
-        phone = t.filter(Char::isDigit)
+        phone = localMobileDigits(t)
         if (localError != null) localError = null
     }
 
@@ -217,7 +215,7 @@ fun SharedLoginScreen(
 
             when (mode) {
                 AuthMode.Otp -> if (!otpStep) {
-                    FarmInput(phone, onPhone, label = "Phone Number", placeholder = "98765 43210", prefix = "+91", keyboardType = KeyboardType.Phone, maxLength = 10)
+                    FarmInput(phone, onPhone, label = "Phone Number", placeholder = "98765 43210", prefix = "+91", keyboardType = KeyboardType.Phone, maxLength = 16, error = auth.fieldErrors["phone"])
                     FarmButton("Send OTP Code", ::sendOtp, Modifier.fillMaxWidth().padding(top = 12.dp), loading = loading)
                 } else {
                     FText("Enter the 6-digit code sent to +91 $phone", textAlign = TextAlign.Center, color = FarmColors.TextLabel, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
@@ -241,15 +239,15 @@ fun SharedLoginScreen(
                     }
                 }
                 AuthMode.SignUp -> {
-                    FarmInput(name, { name = it }, label = "Full Name", placeholder = "Anita Sharma")
-                    FarmInput(phone, onPhone, label = "Phone Number", placeholder = "98765 43210", prefix = "+91", keyboardType = KeyboardType.Phone, maxLength = 10)
-                    FarmInput(email, { email = it }, label = "Email (optional)", placeholder = "you@example.com", keyboardType = KeyboardType.Email)
-                    FarmInput(password, { password = it }, label = "Password", placeholder = "At least 6 characters", isPassword = true)
+                    FarmInput(name, { name = it }, label = "Full Name", placeholder = "Anita Sharma", error = auth.fieldErrors["name"])
+                    FarmInput(phone, onPhone, label = "Phone Number", placeholder = "98765 43210", prefix = "+91", keyboardType = KeyboardType.Phone, maxLength = 16, error = auth.fieldErrors["phone"])
+                    FarmInput(email, { email = it }, label = "Email (optional)", placeholder = "you@example.com", keyboardType = KeyboardType.Email, error = auth.fieldErrors["email"])
+                    FarmInput(password, { password = it }, label = "Password", placeholder = "At least 8 characters", isPassword = true, error = auth.fieldErrors["password"])
                     FarmButton("Create Account", ::signUp, Modifier.fillMaxWidth().padding(top = 12.dp), loading = loading)
                 }
                 AuthMode.Password -> {
-                    FarmInput(phone, onPhone, label = "Phone Number", placeholder = "98765 43210", prefix = "+91", keyboardType = KeyboardType.Phone, maxLength = 10)
-                    FarmInput(password, { password = it }, label = "Password", placeholder = "••••••••", isPassword = true)
+                    FarmInput(phone, onPhone, label = "Phone Number", placeholder = "98765 43210", prefix = "+91", keyboardType = KeyboardType.Phone, maxLength = 16, error = auth.fieldErrors["phone"])
+                    FarmInput(password, { password = it }, label = "Password", placeholder = "••••••••", isPassword = true, error = auth.fieldErrors["password"])
                     FarmButton("Log In", ::passwordLogin, Modifier.fillMaxWidth().padding(top = 12.dp), loading = loading)
                 }
             }
