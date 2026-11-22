@@ -1,5 +1,17 @@
 package com.farm.customer.ui
 
+import androidx.compose.material3.ExperimentalMaterial3Api
+
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+
+import androidx.compose.ui.text.input.ImeAction
+
+import androidx.compose.foundation.text.KeyboardOptions
+
+import androidx.compose.foundation.text.KeyboardActions
+
+import com.farm.customer.prefs.LocalLists
+
 import com.farm.customer.browse.clampRadius
 
 import com.farm.customer.browse.cropEmoji
@@ -184,7 +196,7 @@ private fun TabItem(label: String, active: Boolean, modifier: Modifier, onClick:
 }
 
 @Composable
-private fun SearchBar(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier) {
+private fun SearchBar(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier, onSearch: (String) -> Unit = {}) {
     Row(
         modifier.clip(RoundedCornerShape(10.dp)).background(Color.White).border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(10.dp))
             .padding(horizontal = 10.dp, vertical = 10.dp),
@@ -194,7 +206,11 @@ private fun SearchBar(value: String, onChange: (String) -> Unit, placeholder: St
         Spacer(Modifier.width(6.dp))
         Box(Modifier.weight(1f)) {
             if (value.isEmpty()) Text(placeholder, fontSize = 14.sp, color = Color(0xFF999999), maxLines = 1)
-            BasicTextField(value, onChange, singleLine = true, textStyle = TextStyle(fontSize = 14.sp), modifier = Modifier.fillMaxWidth())
+            BasicTextField(
+                value, onChange, singleLine = true, textStyle = TextStyle(fontSize = 14.sp), modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { onSearch(value) }),
+            )
         }
         if (value.isNotEmpty()) Text("✕", color = Color(0xFF888888), modifier = Modifier.clickable { onChange("") }.padding(start = 6.dp))
     }
@@ -226,18 +242,34 @@ private fun CenterState(emoji: String, title: String, subtitle: String?, action:
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProduceTab(vm: HomeViewModel, nav: HomeNav, onFilter: () -> Unit) {
+    val favourites by LocalLists.favourites.collectAsState()
+    val recent by LocalLists.recentSearches.collectAsState()
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            SearchBar(vm.filters.query, { vm.updateFilters(vm.filters.copy(query = it)) }, "Search produce, crop, or farm...", Modifier.weight(1f))
+            SearchBar(
+                vm.filters.query, { vm.updateFilters(vm.filters.copy(query = it)) }, "Search produce, crop, or farm...", Modifier.weight(1f),
+                onSearch = LocalLists::addSearch,
+            )
             SmallAction("⚙ Filter", onFilter)
             SmallAction(if (vm.produceMap) "📋 List" else "🗺 Map") { vm.produceMap = !vm.produceMap }
         }
         ChipRow {
             Chip("🌱 All", vm.filters.crop == null, { vm.toggleCrop(null) })
+            if (favourites.isNotEmpty()) {
+                Chip("♥ Favourites (${favourites.size})", vm.filters.favouritesOnly, { vm.updateFilters(vm.filters.copy(favouritesOnly = !vm.filters.favouritesOnly)) })
+            }
             vm.crops.forEach { crop ->
                 Chip("${cropEmoji(crop.id)} ${crop.name.ifBlank { crop.id }}", vm.filters.crop == crop.id, { vm.toggleCrop(crop.id) })
+            }
+        }
+        if (vm.filters.query.isEmpty() && recent.isNotEmpty()) {
+            ChipRow {
+                Text("Recent:", fontSize = 12.sp, color = FarmColors.TextMuted, modifier = Modifier.padding(top = 7.dp))
+                recent.forEach { q -> Chip("🕘 $q", false, { vm.updateFilters(vm.filters.copy(query = q)) }) }
+                Chip("Clear", false, LocalLists::clearSearches)
             }
         }
         vm.produceToast?.let {
@@ -255,10 +287,12 @@ private fun ProduceTab(vm: HomeViewModel, nav: HomeNav, onFilter: () -> Unit) {
             vm.produceError != null -> ErrorState(vm.produceError, vm::refreshProduce, title = "Could not load produce")
             listings.isEmpty() -> CenterState("🔍", "No produce found", "Nothing within ${vm.filters.radiusKm} km matches. Widen the radius or reset the filters.", "Reset Filters", vm::resetFilters, secondary = true)
             vm.produceMap -> ProduceMapView(listings, vm.location, onOpen = { nav.listing(it.id) }, onAdded = vm::onAddedToCart)
-            else -> LazyColumn(
+            else -> PullToRefreshBox(isRefreshing = false, onRefresh = vm::refreshProduce, modifier = Modifier.fillMaxSize()) { LazyColumn(
                 Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(listings, key = { it.id }) { item -> ListingCard(item, onOpen = { nav.listing(item.id) }, onAdded = vm::onAddedToCart) }
+                items(listings, key = { it.id }) { item ->
+                    ListingCard(item, onOpen = { LocalLists.addSearch(vm.filters.query); nav.listing(item.id) }, onAdded = vm::onAddedToCart)
+                }
                 if (vm.produceNextCursor != null) {
                     item {
                         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -272,7 +306,7 @@ private fun ProduceTab(vm: HomeViewModel, nav: HomeNav, onFilter: () -> Unit) {
                     }
                 }
                 item { Spacer(Modifier.navigationBarsPadding()) }
-            }
+            } }
         }
     }
 }

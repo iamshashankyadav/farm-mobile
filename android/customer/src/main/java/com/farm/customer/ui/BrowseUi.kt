@@ -1,5 +1,9 @@
 package com.farm.customer.ui
 
+import androidx.compose.runtime.collectAsState
+
+import com.farm.customer.prefs.LocalLists
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -124,7 +128,10 @@ fun ListingCard(listing: ProduceListing, onOpen: () -> Unit, onAdded: (ProduceLi
                 Text("🥕", fontSize = 48.sp, modifier = Modifier.align(Alignment.Center))
             }
             VerifiedBadge(photo, compact = true, modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
-            if (listing.isOrganic) Pill("🌱 Organic", Color(0xFF2D6A4F), Color.White, Modifier.align(Alignment.TopEnd).padding(8.dp))
+            Row(Modifier.align(Alignment.TopEnd).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (listing.isOrganic) Pill("🌱 Organic", Color(0xFF2D6A4F), Color.White)
+                FavouriteButton(listing.farmId, listing.farmName)
+            }
         }
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.Top) {
@@ -218,6 +225,22 @@ fun FilterSheet(filters: FilterState, onApply: (FilterState) -> Unit, onReset: (
 private fun Section(title: String, content: @Composable () -> Unit) {
     FText(title, variant = TextVariant.Label, modifier = Modifier.padding(top = 18.dp, bottom = 8.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
+}
+
+/** Heart that marks a farm as a favourite on this phone (48 dp touch target). */
+@Composable
+fun FavouriteButton(farmId: String, farmName: String, modifier: Modifier = Modifier) {
+    val favourites by LocalLists.favourites.collectAsState()
+    val on = favourites.any { it.farmId == farmId }
+    Box(
+        modifier.size(48.dp).clickable { LocalLists.toggleFavourite(farmId, farmName) }
+            .semantics { contentDescription = if (on) "Remove $farmName from favourite farms" else "Add $farmName to favourite farms" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.size(32.dp).clip(CircleShape).background(Color(0xE6FFFFFF)), contentAlignment = Alignment.Center) {
+            Text(if (on) "♥" else "♡", fontSize = 18.sp, color = if (on) Color(0xFFC2412D) else Color(0xFF4B5258))
+        }
+    }
 }
 
 /** Stars and count, or "Not rated yet" (search hits and listings carry farmRating / farmRatingCount). */

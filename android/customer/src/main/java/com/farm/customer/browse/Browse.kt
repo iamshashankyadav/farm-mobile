@@ -78,6 +78,8 @@ data class FilterState(
     val minPrice: Double? = null,
     val maxPrice: Double? = null,
     val sort: SortOption = SortOption.DISTANCE,
+    /** Only farms marked as favourites on this phone (filtered on the device). */
+    val favouritesOnly: Boolean = false,
 )
 
 /** The catalog rejects a radius above 100 km (422) and needs more than 0. */
@@ -119,7 +121,12 @@ fun matchesQuery(item: ProduceListing, query: String): Boolean {
 }
 
 /** True when a change to [next] needs a new search (anything but the text query). */
-fun needsRefetch(prev: FilterState, next: FilterState): Boolean = prev.copy(query = "") != next.copy(query = "")
+fun needsRefetch(prev: FilterState, next: FilterState): Boolean =
+    prev.copy(query = "", favouritesOnly = false) != next.copy(query = "", favouritesOnly = false)
+
+/** The device-side filters: the text box and "favourite farms only". */
+fun applyLocalFilters(items: List<ProduceListing>, f: FilterState, favouriteFarmIds: Set<String>): List<ProduceListing> =
+    items.filter { matchesQuery(it, f.query) && (!f.favouritesOnly || it.farmId in favouriteFarmIds) }
 
 // ─── Formatting ─────────────────────────────────────────────────────────────
 

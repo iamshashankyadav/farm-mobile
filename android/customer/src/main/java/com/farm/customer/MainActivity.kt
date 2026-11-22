@@ -1,5 +1,7 @@
 package com.farm.customer
 
+import com.farm.customer.prefs.LocalLists
+
 import android.app.Application
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -33,10 +35,12 @@ class FarmCustomerApp : Application() {
     override fun onCreate() {
         super.onCreate()
         FarmCore.init(this)
+        LocalLists.init(this)
         // Signing out (or a session the server no longer accepts) clears what the app keeps locally.
         AuthManager.onSignOut {
             CartStore.clear()
             CartStore.lastCheckout = null
+            LocalLists.clear()
         }
     }
 }
@@ -109,6 +113,7 @@ private fun CustomerNav() {
             OrderDetailScreen(
                 e.arguments?.getString("id").orEmpty(),
                 onBack = { nav.popBackStack() }, onHome = { nav.home() }, onTrack = { nav.navigate("tracking/$it") },
+                onCart = { nav.navigate("cart") },
             )
         }
         composable("notifications") {

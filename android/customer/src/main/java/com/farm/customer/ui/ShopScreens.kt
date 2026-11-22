@@ -1,5 +1,17 @@
 package com.farm.customer.ui
 
+import com.farm.customer.orders.stageText
+
+import com.farm.customer.orders.orderNextStep
+
+import com.farm.customer.orders.PLACED_POLL_MS
+
+import com.farm.customer.orders.PLACED_POLL_LIMIT_MS
+
+import com.farm.core.api.OrderApi
+
+import androidx.compose.runtime.mutableStateMapOf
+
 import androidx.compose.foundation.lazy.items
 
 import androidx.compose.foundation.lazy.LazyRow
@@ -174,7 +186,10 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
             }
             FarmCard(Modifier.fillMaxWidth()) {
                 FText("Farm & Origin", variant = TextVariant.H2, fontSize = 18.sp)
-                InfoRow("🏡", "Farm Name", l.farmName)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { InfoRow("🏡", "Farm Name", l.farmName) }
+                    FavouriteButton(l.farmId, l.farmName)
+                }
                 Column(Modifier.padding(start = 34.dp)) { FarmRatingText(l.farmRating, l.farmRatingCount) }
                 l.farmerName?.let { InfoRow("👨‍🌾", "Farmer", it) }
                 placeOf(l)?.let { InfoRow("📍", "Village and district", it) }
@@ -233,8 +248,10 @@ fun StepButton(label: String, enabled: Boolean, onClick: () -> Unit) {
 fun CartScreen(onBack: () -> Unit, onBrowse: () -> Unit, onCheckout: () -> Unit) {
     val cart by CartStore.cart.collectAsState()
     val groups = cart.groupByFarm()
+    val notice = remember { CartStore.notice.also { CartStore.notice = null } }
     Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
         ScreenHeader("Your cart", onBack)
+        notice?.let { Banner(it, Color(0xFFFFF8E6), Color(0xFF8A5A12), Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) }
         if (groups.isEmpty()) {
             Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 FText("Your cart is empty", variant = TextVariant.H2)
@@ -408,6 +425,20 @@ private fun CheckoutErrorCard(e: CheckoutError, cart: com.farm.customer.checkout
 @Composable
 fun OrderPlacedScreen(onTrack: (String) -> Unit, onOrders: () -> Unit, onShop: () -> Unit) {
     val checkout: Checkout? = remember { CartStore.lastCheckout }
+    // The order service confirms payment through events a few seconds later: poll each new order
+    // briefly so the status shown is the server's, not a guess.
+    val statuses = remember { mutableStateMapOf<String, String>() }
+    LaunchedEffect(checkout) {
+        val orders = checkout?.orders ?: return@LaunchedEffect
+        var waited = 0L
+        while (waited <= PLACED_POLL_LIMIT_MS && orders.any { (statuses[it.id] ?: it.status) == "PLACED" }) {
+            delay(PLACED_POLL_MS)
+            waited += PLACED_POLL_MS
+            orders.filter { (statuses[it.id] ?: it.status) == "PLACED" }.forEach { o ->
+                load { OrderApi.getOrder(o.id) }.onSuccess { statuses[o.id] = it.status }
+            }
+        }
+    }
     Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
         ScreenHeader("Order placed", null)
         if (checkout == null) {
@@ -426,7 +457,9 @@ fun OrderPlacedScreen(onTrack: (String) -> Unit, onOrders: () -> Unit, onShop: (
             checkout.orders.forEach { o ->
                 FarmCard(Modifier.fillMaxWidth()) {
                     FText("Order ${o.id.take(8).uppercase()}", variant = TextVariant.Label)
-                    FText("Status: ${o.status.replace('_', ' ').lowercase()}", variant = TextVariant.Caption)
+                    val status = statuses[o.id] ?: o.status
+                    FText(stageText(status), variant = TextVariant.Caption)
+                    orderNextStep(status)?.let { FText(it, variant = TextVariant.Caption, color = FarmColors.TextLabel) }
                     o.items.forEach { FText("${it.name} · ${formatQty(it.qty)} ${it.unit}", variant = TextVariant.Caption) }
                     FText("Total ${formatRupees(o.total)}", variant = TextVariant.Label, modifier = Modifier.padding(vertical = 6.dp))
                     FarmButton("Track delivery", { onTrack(o.id) }, Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary)

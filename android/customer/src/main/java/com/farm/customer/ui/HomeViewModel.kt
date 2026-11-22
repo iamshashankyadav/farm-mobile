@@ -1,5 +1,9 @@
 package com.farm.customer.ui
 
+import com.farm.customer.prefs.LocalLists
+
+import com.farm.customer.browse.applyLocalFilters
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -50,7 +54,8 @@ class HomeViewModel : ViewModel() {
         private set
 
     /** The loaded results, narrowed by the text box (the server applies every other filter). */
-    val listings: List<ProduceListing> get() = allListings.filter { matchesQuery(it, filters.query) }
+    val listings: List<ProduceListing>
+        get() = applyLocalFilters(allListings, filters, LocalLists.favourites.value.map { it.farmId }.toSet())
     /** Cursor of the next result page; null when everything is loaded. */
     var produceNextCursor by mutableStateOf<String?>(null)
         private set

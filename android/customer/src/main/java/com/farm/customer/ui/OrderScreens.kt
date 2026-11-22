@@ -1,5 +1,13 @@
 package com.farm.customer.ui
 
+import com.farm.customer.checkout.CartStore
+
+import com.farm.customer.orders.reorder
+
+import com.farm.customer.orders.orderNextStep
+
+import com.farm.customer.orders.canReorder
+
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
@@ -281,6 +289,7 @@ private fun OrderCard(order: OrderSummary, onClick: () -> Unit) {
             }
         } else {
             StatusRail(railStage(order.status), stageText(order.status))
+            orderNextStep(order.status)?.let { FText(it, variant = TextVariant.Caption, modifier = Modifier.padding(top = 2.dp)) }
         }
     }
 }
@@ -314,7 +323,7 @@ private fun rememberOrder(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, onTrack: (String) -> Unit) =
+fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, onTrack: (String) -> Unit, onCart: () -> Unit) =
     RequireCustomer("Access denied.", onHome) {
         val scope = rememberCoroutineScope()
         var reload by remember { mutableIntStateOf(0) }
@@ -322,6 +331,7 @@ fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, o
         var confirmCancel by remember { mutableStateOf(false) }
         var cancelling by remember { mutableStateOf(false) }
         var cancelError by remember { mutableStateOf<String?>(null) }
+        var reordering by remember { mutableStateOf(false) }
         // Refresh every 15 s while the order can still change, so packing on the website or a
         // pickup by the partner shows up without leaving the screen.
         val (order, error, loaded) = rememberOrder(orderId, reload, onLoaded = { refreshing = false }) {
@@ -384,6 +394,7 @@ fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, o
                             Text(rupees(order.total), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = FarmColors.Primary)
                         }
                         if (order.status != "CANCELLED") StatusRail(stage, stageText(order.status), Modifier.padding(top = 12.dp))
+                        orderNextStep(order.status)?.let { FText(it, variant = TextVariant.Caption, color = FarmColors.TextLabel, modifier = Modifier.padding(top = 4.dp)) }
                         Column(Modifier.padding(top = 10.dp)) {
                             order.items.forEach { LineRow("${it.name}  ×${qtyText(it.qty)} ${it.unit}", rupees(it.lineTotal)) }
                             if (order.deliveryFee > 0) LineRow("Delivery", rupees(order.deliveryFee))
@@ -423,6 +434,22 @@ fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, o
                         order.status == "CANCELLED" -> {}
                         canRate(order.status, order.rating != null) -> FarmButton("Rate this order", { onTrack(order.id) }, Modifier.fillMaxWidth())
                         else -> FarmButton("Track delivery", { onTrack(order.id) }, Modifier.fillMaxWidth())
+                    }
+                    if (canReorder(order.orderType, order.items)) {
+                        FarmButton(
+                            if (reordering) "Checking today's stock…" else "Order again",
+                            {
+                                reordering = true
+                                scope.launch {
+                                    val result = reorder(order.items)
+                                    result.added.forEach(CartStore::add)
+                                    CartStore.notice = result.message
+                                    reordering = false
+                                    onCart()
+                                }
+                            },
+                            Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary, enabled = !reordering,
+                        )
                     }
                     if (canCancel(order.status)) {
                         cancelError?.let { Text(it, color = Color(0xFFC2412D), fontSize = 13.sp) }
