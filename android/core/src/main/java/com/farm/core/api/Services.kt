@@ -237,10 +237,24 @@ object OrderApi {
 
 /** Notification service (gateway prefix /notification). */
 object NotificationApi {
-    suspend fun list(cursor: String?, limit: Int = 20): NotificationPage {
-        val res = Http.get("/notification/notifications", linkedMapOf("limit" to limit, "cursor" to cursor))
+    @Serializable
+    private data class UnreadCount(val count: Int = 0)
+
+    /** A page of the inbox, newest first; [unreadOnly] asks the server for unread ones only. */
+    suspend fun list(cursor: String?, limit: Int = 20, unreadOnly: Boolean = false): NotificationPage {
+        val res = Http.get(
+            "/notification/notifications",
+            linkedMapOf("limit" to limit, "cursor" to cursor, "unreadOnly" to if (unreadOnly) true else null),
+        )
         if (!res.ok) throw ApiException("Could not load notifications (${res.status})", status = res.status)
         return res.decode()
+    }
+
+    /** The number on the bell (GET /notification/notifications/unread-count). */
+    suspend fun unreadCount(): Int {
+        val res = Http.get("/notification/notifications/unread-count")
+        if (!res.ok) throw ApiException("Could not load the unread count (${res.status})", status = res.status)
+        return res.decode<UnreadCount>().count
     }
 
     suspend fun markRead(id: String) {

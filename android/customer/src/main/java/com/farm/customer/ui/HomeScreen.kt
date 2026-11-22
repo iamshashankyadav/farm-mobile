@@ -104,7 +104,7 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
                         ) { Text(if (cartCount > 99) "99+" else "$cartCount", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold) }
                     }
                 }
-                if (auth.isAuthenticated) RoundIcon("🔔", FarmColors.Background, nav.notifications)
+                if (auth.isAuthenticated) NotificationBell(nav.notifications)
                 RoundIcon("👥", FarmColors.Background, nav.team)
                 RoundIcon(if (auth.isAuthenticated) "👤" else "🔑", FarmColors.Background, { if (auth.isAuthenticated) nav.orders() else nav.login() })
             }

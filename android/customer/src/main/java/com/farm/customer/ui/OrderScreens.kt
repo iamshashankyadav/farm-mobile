@@ -101,10 +101,13 @@ import com.farm.customer.orders.formatDate
 import com.farm.customer.orders.formatDateTime
 import com.farm.customer.orders.harvestStageOf
 import com.farm.customer.orders.haversineKm
+import com.farm.customer.notifications.NotificationTarget
+import com.farm.customer.notifications.markReadLocally
+import com.farm.customer.notifications.newestFirst
+import com.farm.customer.notifications.notificationTarget
 import com.farm.customer.orders.itemsLabel
 import com.farm.customer.orders.load
 import com.farm.customer.orders.loadErrorMessage
-import com.farm.customer.orders.notificationOrderId
 import com.farm.customer.orders.orderTitle
 import com.farm.customer.orders.parseChoiceError
 import com.farm.customer.orders.phaseOf
@@ -193,7 +196,7 @@ fun OrdersScreen(onBack: () -> Unit, onHome: () -> Unit, onOrder: (String) -> Un
 
         Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
             ScreenHeader("My Orders", onBack) {
-                Text("🔔", fontSize = 20.sp, modifier = Modifier.clickable(onClick = onNotifications).padding(6.dp))
+                NotificationBell(onNotifications)
             }
             PullToRefreshBox(refreshing, { refreshing = true; reload++ }, Modifier.fillMaxSize()) {
                 val (active, past) = splitOrders(orders)
@@ -430,90 +433,120 @@ private fun LineRow(label: String, value: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificationsScreen(onBack: () -> Unit, onHome: () -> Unit, onOrder: (String) -> Unit) =
+fun NotificationsScreen(
+    onBack: () -> Unit,
+    onHome: () -> Unit,
+    onOrder: (String) -> Unit,
+    /** Opens a reservation; null while the app has no reservation screen to open. */
+    onReservation: ((String) -> Unit)? = null,
+) =
     RequireCustomer("Please log in as a customer.", onHome) {
         val scope = rememberCoroutineScope()
         var items by remember { mutableStateOf<List<AppNotification>>(emptyList()) }
         var unread by remember { mutableIntStateOf(0) }
         var cursor by remember { mutableStateOf<String?>(null) }
         var loaded by remember { mutableStateOf(false) }
-        var failed by remember { mutableStateOf(false) }
+        var failure by remember { mutableStateOf<String?>(null) }
         var refreshing by remember { mutableStateOf(false) }
         var reload by remember { mutableIntStateOf(0) }
+        var unreadOnly by remember { mutableStateOf(false) }
+        var actionError by remember { mutableStateOf<String?>(null) }
+        var loadingMore by remember { mutableStateOf(false) }
 
-        LaunchedEffect(reload) {
-            try {
-                val page = NotificationApi.list(null)
-                items = page.items; unread = page.unreadCount; cursor = page.nextCursor; failed = false
-            } catch (_: Exception) {
-                failed = true
-            }
+        LaunchedEffect(reload, unreadOnly) {
+            load { NotificationApi.list(null, unreadOnly = unreadOnly) }
+                .onSuccess { page ->
+                    items = newestFirst(page.items); unread = page.unreadCount; cursor = page.nextCursor; failure = null
+                }
+                .onFailure { failure = loadErrorMessage(it) }
             loaded = true; refreshing = false
         }
 
-        /** Marks read on screen first, puts it back if the server refuses. */
+        /** Marks read on screen first, puts it back (and says so) if the server refuses. */
         fun markRead(id: String?) {
             val before = items to unread
-            val now = Instant.now().toString()
-            items = items.map { if (it.readAt == null && (id == null || it.id == id)) it.copy(readAt = now) else it }
+            items = markReadLocally(items, id, Instant.now().toString())
             unread = if (id == null) 0 else maxOf(0, unread - 1)
+            actionError = null
             scope.launch {
-                try {
-                    if (id == null) NotificationApi.markAllRead() else NotificationApi.markRead(id)
-                } catch (_: Exception) {
-                    items = before.first; unread = before.second
-                }
+                load { if (id == null) NotificationApi.markAllRead() else NotificationApi.markRead(id) }
+                    .onFailure {
+                        items = before.first; unread = before.second
+                        actionError = loadErrorMessage(it)
+                    }
             }
         }
 
         Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
             ScreenHeader(if (unread > 0) "Notifications ($unread)" else "Notifications", onBack) {
-                if (unread > 0) Text("Mark all read", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { markRead(null) }.padding(4.dp))
+                if (unread > 0) Text("Mark all read", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { markRead(null) }.padding(12.dp))
             }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Chip("All", !unreadOnly, { if (unreadOnly) { unreadOnly = false; loaded = false } })
+                Chip("Unread only", unreadOnly, { if (!unreadOnly) { unreadOnly = true; loaded = false } })
+            }
+            actionError?.let { FText(it, variant = TextVariant.Caption, color = Color(0xFFC2412D), modifier = Modifier.padding(horizontal = 16.dp)) }
             PullToRefreshBox(refreshing, { refreshing = true; reload++ }, Modifier.fillMaxSize()) {
                 LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     when {
                         !loaded -> item { Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = FarmColors.Primary) } }
-                        failed -> item {
+                        failure != null && items.isEmpty() -> item {
                             FarmCard(Modifier.fillMaxWidth()) {
                                 FText("Could not load notifications", variant = TextVariant.H2, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                                FText(failure ?: "", variant = TextVariant.Caption, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                                 FarmButton("Try again", { reload++ }, Modifier.fillMaxWidth().padding(top = 16.dp))
                             }
                         }
                         items.isEmpty() -> item {
                             FarmCard(Modifier.fillMaxWidth()) {
                                 Text("🔔", fontSize = 40.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
-                                FText("All caught up!", variant = TextVariant.H2, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-                                FText("No notifications yet. We'll let you know when something happens.", variant = TextVariant.Caption, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                                FText(if (unreadOnly) "No unread notifications" else "All caught up!", variant = TextVariant.H2, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                                FText(
+                                    if (unreadOnly) "You have read everything. Switch to All to see older ones."
+                                    else "No notifications yet. We'll let you know when something happens.",
+                                    variant = TextVariant.Caption, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+                                )
                             }
                         }
                         else -> items(items, key = { it.id }) { n ->
                             val isUnread = n.readAt == null
-                            val orderId = notificationOrderId(n.payload)
+                            val target = when (val t = notificationTarget(n)) {
+                                is NotificationTarget.Order -> { { onOrder(t.orderId) } }
+                                is NotificationTarget.Reservation -> onReservation?.let { open -> { open(t.reservationId) } }
+                                null -> null
+                            }
                             FarmCard(
                                 Modifier.fillMaxWidth(),
                                 background = if (isUnread) Color(0xFFF1F8F4) else Color.White,
                                 border = if (isUnread) BorderStroke(1.dp, Color(0xFFC8E6C9)) else null,
-                                onClick = { if (isUnread) markRead(n.id); orderId?.let(onOrder) },
+                                onClick = { if (isUnread) markRead(n.id); target?.invoke() },
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     if (isUnread) { Box(Modifier.size(8.dp).clip(CircleShape).background(FarmColors.Primary)); Spacer(Modifier.width(10.dp)) }
                                     Column(Modifier.weight(1f)) {
-                                        FText(n.title, variant = TextVariant.Label, color = if (isUnread) FarmColors.TextDark else FarmColors.TextLabel)
+                                        FText(
+                                            n.title, variant = TextVariant.Label,
+                                            fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isUnread) FarmColors.TextDark else FarmColors.TextLabel,
+                                        )
                                         FText(n.body, variant = TextVariant.Caption, color = Color(0xFF555555))
-                                        FText(timeAgo(n.createdAt), variant = TextVariant.Caption, fontSize = 11.sp)
+                                        FText((if (isUnread) "Unread · " else "") + timeAgo(n.createdAt), variant = TextVariant.Caption, fontSize = 11.sp)
                                     }
-                                    if (orderId != null) Text("›", fontSize = 22.sp, color = Color(0xFFBBBBBB))
+                                    if (target != null) Text("›", fontSize = 22.sp, color = Color(0xFFBBBBBB))
                                 }
                             }
                         }
                     }
-                    if (cursor != null) item {
-                        FarmButton("Load older notifications", {
+                    if (loaded && cursor != null) item {
+                        FarmButton(if (loadingMore) "Loading…" else "Load older notifications", {
+                            loadingMore = true
                             scope.launch {
-                                runCatching { NotificationApi.list(cursor) }.onSuccess { items = items + it.items; cursor = it.nextCursor }
+                                load { NotificationApi.list(cursor, unreadOnly = unreadOnly) }
+                                    .onSuccess { items = newestFirst(items + it.items); cursor = it.nextCursor }
+                                    .onFailure { actionError = loadErrorMessage(it) }
+                                loadingMore = false
                             }
-                        }, Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary)
+                        }, Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary, enabled = !loadingMore)
                     }
                 }
             }
