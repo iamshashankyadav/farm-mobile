@@ -70,6 +70,8 @@ class HomeNav(
     val login: () -> Unit,
     val listing: (String) -> Unit,
     val harvest: (String) -> Unit,
+    /** Opens one reservation from the server (deposit, status, crop timeline). */
+    val reservation: (String) -> Unit,
 )
 
 @Composable
@@ -306,7 +308,7 @@ private fun LandTab(vm: HomeViewModel, nav: HomeNav) {
                 CropTimelineView(timeline, onClose = { vm.timelineReservation = null }, onHarvest = nav.harvest)
             } else {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-                    MyReservationsList(vm.reservations, onSelect = { vm.timelineReservation = it }, onExplore = { vm.landSubTab = LandSubTab.EXPLORE })
+                    MyReservationsList(vm.reservations, onSelect = { nav.reservation(it.id) }, onExplore = { vm.landSubTab = LandSubTab.EXPLORE })
                 }
             }
         }

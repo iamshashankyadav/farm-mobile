@@ -74,6 +74,21 @@ object LandApi {
         return res.decode()
     }
 
+    /** The farmer's crop updates for a reservation, oldest first. */
+    suspend fun getCropUpdates(reservationId: String): List<CropUpdateOut> {
+        val res = Http.get("/land/reservations/${Http.enc(reservationId)}/updates")
+        if (!res.ok) throw ApiException(res.error()?.message ?: "Could not load the crop updates (${res.status})", res.error()?.code ?: "REQUEST_FAILED", res.status)
+        return res.decode()
+    }
+
+    /** The agreement made when the farmer accepted, or null before that (404 AGREEMENT_NOT_FOUND). */
+    suspend fun getAgreement(reservationId: String): AgreementOut? {
+        val res = Http.get("/land/reservations/${Http.enc(reservationId)}/agreement")
+        if (res.status == 404) return null
+        if (!res.ok) throw ApiException(res.error()?.message ?: "Could not load the agreement (${res.status})", res.error()?.code ?: "REQUEST_FAILED", res.status)
+        return res.decode()
+    }
+
     suspend fun cancelReservation(reservationId: String): ReservationOut {
         val res = Http.post("/land/reservations/${Http.enc(reservationId)}/cancel")
         if (!res.ok) throw ApiException("Failed to cancel reservation: ${res.status}", status = res.status)

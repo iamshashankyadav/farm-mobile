@@ -26,6 +26,7 @@ import com.farm.customer.ui.NotificationsScreen
 import com.farm.customer.ui.OrderDetailScreen
 import com.farm.customer.ui.OrderPlacedScreen
 import com.farm.customer.ui.OrdersScreen
+import com.farm.customer.ui.ReservationScreen
 import com.farm.customer.ui.TrackingScreen
 
 class FarmCustomerApp : Application() {
@@ -61,6 +62,7 @@ private fun CustomerNav() {
                     login = { nav.navigate("login") },
                     listing = { nav.navigate("listing/$it") },
                     harvest = { nav.navigate("harvest/$it") },
+                    reservation = { nav.navigate("reservation/$it") },
                 ),
             )
         }
@@ -108,13 +110,23 @@ private fun CustomerNav() {
             )
         }
         composable("notifications") {
-            NotificationsScreen(onBack = { nav.popBackStack() }, onHome = { nav.home() }, onOrder = { nav.navigate("order/$it") })
+            NotificationsScreen(
+                onBack = { nav.popBackStack() }, onHome = { nav.home() }, onOrder = { nav.navigate("order/$it") },
+                onReservation = { nav.navigate("reservation/$it") },
+            )
         }
         composable("tracking/{id}") { e ->
             TrackingScreen(
                 e.arguments?.getString("id").orEmpty(),
                 onBack = { nav.popBackStack() },
                 onOrders = { nav.navigate("orders") { popUpTo("home") } },
+            )
+        }
+        composable("reservation/{id}") { e ->
+            ReservationScreen(
+                e.arguments?.getString("id").orEmpty(),
+                onBack = { nav.popBackStack() },
+                onHarvest = { nav.navigate("harvest/$it") },
             )
         }
         composable("harvest/{reservationId}") { e ->
