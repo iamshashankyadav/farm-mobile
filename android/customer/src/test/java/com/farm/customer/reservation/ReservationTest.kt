@@ -4,6 +4,8 @@ import com.farm.core.api.CropUpdateOut
 import com.farm.core.api.Http
 import com.farm.core.api.PaymentIntentCreate
 import com.farm.core.api.ReservationOut
+import com.farm.customer.orders.HarvestStage
+import com.farm.customer.orders.harvestStageOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -73,6 +75,19 @@ class ReservationTest {
     fun harvestChoiceOnlyWhileFulfilling() {
         assertTrue(canChooseHarvest("FULFILLING"))
         listOf("ACTIVE", "HARVEST_READY", "CANCELLED").forEach { assertFalse(it, canChooseHarvest(it)) }
+    }
+
+    @Test
+    fun harvestChoiceNeedsFulfillingAndAnOrderWithoutAnOption() {
+        val choose = harvestStageOf("PLACED", null)
+        assertEquals(HarvestStage.CHOOSE, choose)
+        assertTrue(showHarvestChoice("FULFILLING", choose))
+        // land not caught up yet, or not loaded: do not offer the choice
+        assertFalse(showHarvestChoice("HARVEST_READY", choose))
+        assertFalse(showHarvestChoice(null, choose))
+        // already chosen, or no harvest order yet
+        assertFalse(showHarvestChoice("FULFILLING", harvestStageOf("READY_FOR_DISPATCH", "DELIVERY")))
+        assertFalse(showHarvestChoice("FULFILLING", harvestStageOf(null, null)))
     }
 
     @Test
