@@ -179,6 +179,9 @@ fun ProofOfDeliverySheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (Strin
     var notes by remember { mutableStateOf("") }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // The photo already uploaded for this stop, so a refused delivery (e.g. a wrong OTP) is retried
+    // without uploading the same photo again.
+    var uploaded by remember { mutableStateOf<Pair<Uri, String>?>(null) }
 
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         if (ok) {
@@ -207,10 +210,9 @@ fun ProofOfDeliverySheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (Strin
     }
     fun pickPhoto() = gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
 
-    val expected = stop.otp
+    // The server checks the code; the app only makes sure four digits were typed.
     val otpComplete = otp.length == 4
-    val otpValid = if (expected != null) otp == expected else otpComplete
-    val canSubmit = photoUri != null && otpValid && !submitting
+    val canSubmit = photoUri != null && otpComplete && !submitting
 
     StopSheet("Proof of Delivery", stop, submitting, onClose) {
         error?.let { Banner("⚠️ $it", FarmColors.ErrorBg, Color(0xFFC62828)) }
@@ -239,11 +241,7 @@ fun ProofOfDeliverySheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (Strin
         FarmCard(Modifier.fillMaxWidth()) {
             FText("2. Customer OTP Verification (Required)", variant = TextVariant.Label)
             FText("Ask the customer for the 4-digit code shown on their order screen.", variant = TextVariant.Caption, modifier = Modifier.padding(bottom = 10.dp))
-            val borderColor = when {
-                !otpComplete -> FarmColors.Border
-                otpValid -> Color(0xFF2E7D32)
-                else -> Color(0xFFC62828)
-            }
+            val borderColor = if (otpComplete) FarmColors.Primary else FarmColors.Border
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color.White)
                     .border(2.dp, borderColor, RoundedCornerShape(10.dp)).padding(vertical = 12.dp),
@@ -258,13 +256,6 @@ fun ProofOfDeliverySheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (Strin
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     textStyle = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = 8.sp, textAlign = TextAlign.Center, color = FarmColors.TextDark),
                     modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            if (otpComplete) {
-                Text(
-                    if (otpValid) "✓ OTP matches! Delivery verified." else "✗ Invalid OTP. Please confirm the 4-digit code with customer.",
-                    color = if (otpValid) Color(0xFF2E7D32) else Color(0xFFC62828),
-                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp),
                 )
             }
         }
@@ -296,10 +287,15 @@ fun ProofOfDeliverySheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (Strin
                         submitting = false
                         return@launch
                     }
-                    load {
-                        val mediaId = MediaApi.uploadDeliveryPhoto(bytes, "image/jpeg", stop.id)
-                        LogisticsApi.submitDelivery(stop.id, otp, mediaId, notes.trim().ifEmpty { null })
-                    }
+                    val mediaId = uploaded?.takeIf { it.first == uri }?.second
+                        ?: load { MediaApi.uploadDeliveryPhoto(bytes, "image/jpeg", stop.id) }
+                            .onSuccess { uploaded = uri to it }
+                            .getOrElse {
+                                error = "Photo upload failed: ${loadErrorMessage(it)} Tap Complete Delivery to try again."
+                                submitting = false
+                                return@launch
+                            }
+                    load { LogisticsApi.submitDelivery(stop.id, otp, mediaId, notes.trim().ifEmpty { null }) }
                         .onSuccess { onSuccess(stop.id); onClose() }
                         .onFailure { error = loadErrorMessage(it); submitting = false }
                 }

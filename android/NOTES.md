@@ -85,3 +85,10 @@ what we expected. The backend owner fixes them; the apps do not work around them
    name and no farmer name.
    Expected (issue #41, "real village and district"): `village` and `district` on the plot (and
    ideally the farmer's display name). Until then the app hides those rows.
+
+2. **The partner's route carries each customer's delivery code.**
+   Request: `GET /logistics/my-route` as the delivery partner.
+   Response: every DROP stop includes `otp`.
+   Expected: no `otp` for the partner; the code is what the customer tells the partner at the door,
+   so the partner must not be able to read it. The delivery app no longer shows or checks it; the
+   server's `deliver` call is the only check (#45).

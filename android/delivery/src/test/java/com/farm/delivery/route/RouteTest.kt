@@ -33,15 +33,15 @@ class RouteTest {
     }
 
     @Test
-    fun dropStopCarriesCustomerAddressAndOtp() {
+    fun dropStopCarriesCustomerAddressAndNeverTheOtp() {
         val r = toRouteStop(
             stop(id = "s2", stopType = "DROP", seq = 2, status = "ARRIVED", customerName = "Asha Verma", address = "Flat 4, Raipur", otp = "4821"),
         )
         assertEquals(StopType.DROP, r.type)
-        assertEquals(StopStatus.PENDING, r.status) // arrived but not delivered yet
         assertEquals("Customer: Asha Verma", r.label)
         assertEquals("Flat 4, Raipur", r.address)
-        assertEquals("4821", r.otp)
+        assertEquals(StopStatus.ARRIVED, r.status)
+        assertEquals(true, r.status.open) // arrived but not delivered yet: still the stop to work on
         assertEquals("Customer: order #aaaaaaaa", toRouteStop(stop(stopType = "DROP", customerName = "  ")).label)
     }
 
@@ -79,5 +79,27 @@ class RouteTest {
     @Test
     fun localIsoDateUsesTheCalendarDay() {
         assertEquals("2026-01-05", localIsoDate(LocalDate.of(2026, 1, 5)))
+    }
+
+    @Test
+    fun dialUriKeepsDigitsAndPlus() {
+        assertEquals("tel:+919400000001", dialUri("+91 94000-00001"))
+        assertEquals(null, dialUri("  "))
+        assertEquals(null, dialUri(null))
+    }
+
+    @Test
+    fun phoneAndNotesComeFromTheStop() {
+        val r = toRouteStop(stop(stopType = "DROP").copy(customerPhone = " +919400000002 ", notes = "Ring twice"))
+        assertEquals("+919400000002", r.phone)
+        assertEquals("Ring twice", r.notes)
+    }
+
+    @Test
+    fun routeLengthAddsLegsInOrder() {
+        val a = toRouteStop(stop(id = "a").copy(lat = 21.0, lng = 81.0))
+        val b = toRouteStop(stop(id = "b").copy(lat = 21.01, lng = 81.0))
+        assertEquals(1112.0, routeLengthM(listOf(a, b)), 5.0)
+        assertEquals(0.0, routeLengthM(listOf(a)), 0.0)
     }
 }
