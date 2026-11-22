@@ -13,6 +13,7 @@ import com.farm.core.api.PaymentIntentCreate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -96,6 +97,21 @@ fun Cart.toOrderItems(): List<OrderItemIn> = items.map { OrderItemIn(it.listingI
 /** Flat delivery fee per farm order that the backend charges (order service setting). */
 const val DELIVERY_FEE_PER_ORDER = 20.0
 
+/** One farm's order before paying: its items, the delivery fee and what that order costs. */
+data class FarmCharge(val farmId: String, val farmName: String, val items: Double, val deliveryFee: Double) {
+    val total: Double get() = round2(items + deliveryFee)
+}
+
+/** What the customer pays, split the way the server will create the orders (one per farm). */
+data class Breakdown(val farms: List<FarmCharge>, val items: Double, val delivery: Double, val total: Double)
+
+fun Cart.breakdown(feePerFarm: Double): Breakdown {
+    val farms = groupByFarm().map { FarmCharge(it.farmId, it.farmName, it.subtotal, feePerFarm) }
+    val items = round2(farms.sumOf { it.items })
+    val delivery = round2(feePerFarm * farms.size)
+    return Breakdown(farms, items, delivery, round2(items + delivery))
+}
+
 /** In-memory cart shared by every screen. */
 object CartStore {
     private val _cart = MutableStateFlow(Cart())
@@ -175,7 +191,8 @@ fun validateAddress(form: AddressForm): AddressResult {
 
 sealed class CheckoutError(val message: String) {
     class Stock(message: String, val shortages: List<Shortage>) : CheckoutError(message)
-    class ListingUnavailable(message: String) : CheckoutError(message)
+    /** [listingIds] are the cart lines the server named in `error.details` (may be empty). */
+    class ListingUnavailable(message: String, val listingIds: List<String> = emptyList()) : CheckoutError(message)
     class PaymentFailed(message: String) : CheckoutError(message)
     class InProgress(message: String) : CheckoutError(message)
     class AttemptInvalid(message: String) : CheckoutError(message)
@@ -191,6 +208,13 @@ sealed interface ApiResult<out T> {
 }
 
 val networkError = CheckoutError.Network("Could not reach the server. Check your connection and try again.")
+
+/** The server answered 2xx with a body the app cannot read (a contract mismatch, not a network error). */
+val unreadableReply = CheckoutError.Server("The server sent a reply the app could not read. Please try again.", "UNREADABLE_REPLY")
+
+private fun toListingIds(details: JsonElement?): List<String> = (details as? JsonArray)?.mapNotNull { d ->
+    (d as? JsonObject)?.get("listingId")?.jsonPrimitive?.content
+} ?: emptyList()
 
 private fun toShortages(details: JsonElement?): List<Shortage> = (details as? JsonArray)?.mapNotNull { d ->
     val o = d as? JsonObject ?: return@mapNotNull null
@@ -210,7 +234,10 @@ fun parseCheckoutError(status: Int, body: com.farm.core.api.ErrorBody?): Checkou
         code == "STOCK_UNAVAILABLE" ->
             CheckoutError.Stock("Some items are no longer available in the quantity you chose.", toShortages(body.details))
         code == "LISTING_NOT_AVAILABLE" || code == "LISTING_NOT_FOUND" ->
-            CheckoutError.ListingUnavailable("An item in your cart is no longer for sale. Remove it and try again.")
+            CheckoutError.ListingUnavailable(
+                "An item in your cart is no longer for sale. Remove it and try again.",
+                toListingIds(body.details),
+            )
         code == "IDEMPOTENCY_IN_PROGRESS" -> CheckoutError.InProgress("Your order is still being processed. Try again.")
         code in listOf("IDEMPOTENCY_KEY_REUSED", "PAYMENT_INTENT_USED", "PAYMENT_INTENT_NOT_FOUND") ->
             CheckoutError.AttemptInvalid("That checkout attempt cannot be reused. Please try again.")
@@ -242,6 +269,8 @@ object RealCheckoutApi : CheckoutApi {
         if (res.ok) ApiResult.Ok(res.decode<PaymentIntent>().id) else ApiResult.Err(parseCheckoutError(res.status, res.error()))
     } catch (_: NetworkException) {
         ApiResult.Err(networkError)
+    } catch (_: SerializationException) {
+        ApiResult.Err(unreadableReply)
     }
 
     override suspend fun placeOrder(key: String, body: CheckoutRequest): ApiResult<Checkout> = try {
@@ -249,6 +278,8 @@ object RealCheckoutApi : CheckoutApi {
         if (res.ok) ApiResult.Ok(res.decode<Checkout>()) else ApiResult.Err(parseCheckoutError(res.status, res.error()))
     } catch (_: NetworkException) {
         ApiResult.Err(networkError)
+    } catch (_: SerializationException) {
+        ApiResult.Err(unreadableReply)
     }
 }
 
