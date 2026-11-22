@@ -313,7 +313,7 @@ fun CheckoutScreen(onBack: () -> Unit, onCart: () -> Unit, onLogin: () -> Unit, 
                     g.items.forEach { FText("${it.name} · ${formatQty(it.qty)} ${it.unit} · ${formatRupees(it.unitPrice * it.qty)}", variant = TextVariant.Caption) }
                 }
                 FText("Total ${formatRupees(total)} (incl. delivery)", variant = TextVariant.Label, modifier = Modifier.padding(top = 8.dp))
-                FText("Payment is simulated: no real money is taken.", variant = TextVariant.Caption)
+                FText("This is a test payment: no real money is taken.", variant = TextVariant.Caption)
             }
             FarmCard(Modifier.fillMaxWidth()) {
                 FText("Delivery address", variant = TextVariant.H2, fontSize = 18.sp)

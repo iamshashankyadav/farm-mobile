@@ -56,9 +56,9 @@ Which address to use:
 Demo accounts and the demo story are in `farm-backend/docs/DEMO.md` (password `Farm@12345`).
 Plain HTTP is allowed (`usesCleartextTraffic`) because the gateway runs without TLS.
 
-Without a backend, the customer app currently falls back to the same seed produce / plots / reservations as before
-(`customer/src/main/assets/*.json`), and both login screens have the "Mock … Login" dev buttons.
-Both are being removed (#36); `NOTES.md` lists every screen's state.
+The apps show only what the server returns. When it cannot be reached, each screen says
+"Cannot reach the server at <address>" with **Retry** and **Change server**; there is no offline
+sample data and no dev login. `NOTES.md` has the baseline from before this was cleaned up.
 
 ## Differences from the React Native version
 
