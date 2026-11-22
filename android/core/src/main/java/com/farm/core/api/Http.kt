@@ -48,8 +48,13 @@ class NetworkException(cause: Throwable? = null) :
     IOException("No connection. Check your network and try again.", cause)
 
 /** An HTTP error from the platform, with the `{ error: { code, message } }` body decoded. */
-open class ApiException(message: String, val code: String = "REQUEST_FAILED", val status: Int = 400) :
-    Exception(message)
+open class ApiException(
+    message: String,
+    val code: String = "REQUEST_FAILED",
+    val status: Int = 400,
+    /** `error.details` of the envelope, e.g. `[{field, message}]` for VALIDATION_ERROR. */
+    val details: JsonElement? = null,
+) : Exception(message)
 
 @Serializable
 data class ErrorBody(
@@ -110,8 +115,17 @@ object Http {
     inline fun <reified T> encode(value: T): String = json.encodeToString(value)
 
     /**
+     * Called once when a request made with a token answers 401: it refreshes the session and
+     * returns the new access token, or null when the session is over (the caller then gets the 401).
+     * [failedToken] lets it notice that another request already refreshed. Set by AuthManager.
+     */
+    @Volatile
+    var onUnauthorized: (suspend (failedToken: String) -> String?)? = null
+
+    /**
      * One HTTP call. [path] is relative to the gateway base URL unless [absolute] is true.
      * Throws [NetworkException] when the server cannot be reached; HTTP errors are returned.
+     * A 401 on a gateway call made with a token refreshes the token once and retries.
      */
     suspend fun call(
         method: String,
@@ -121,6 +135,21 @@ object Http {
         token: String? = tokenProvider(),
         absolute: Boolean = false,
         rawBody: RequestBody? = null,
+    ): HttpResult {
+        val first = execute(method, path, body, headers, token, absolute, rawBody)
+        if (first.status != 401 || token == null || absolute || path.startsWith("/identity/")) return first
+        val fresh = onUnauthorized?.invoke(token) ?: return first
+        return execute(method, path, body, headers, fresh, absolute, rawBody)
+    }
+
+    private suspend fun execute(
+        method: String,
+        path: String,
+        body: String?,
+        headers: Map<String, String>,
+        token: String?,
+        absolute: Boolean,
+        rawBody: RequestBody?,
     ): HttpResult = withContext(Dispatchers.IO) {
         val builder = Request.Builder().url(if (absolute) path else url(path))
         token?.let { builder.header("Authorization", "Bearer $it") }

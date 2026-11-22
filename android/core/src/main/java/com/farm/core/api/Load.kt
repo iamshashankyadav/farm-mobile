@@ -30,5 +30,7 @@ fun loadErrorMessage(e: Throwable?, baseUrl: String = ApiConfig.baseUrl): String
 /** An [ApiException] carrying the platform error envelope's message and code, or [fallback]. */
 fun apiError(res: HttpResult, fallback: String): ApiException {
     val error = res.error()
-    return ApiException(error?.message ?: error?.detail ?: "$fallback (${res.status})", error?.code ?: "REQUEST_FAILED", res.status)
+    return ApiException(
+        error?.message ?: error?.detail ?: "$fallback (${res.status})", error?.code ?: "REQUEST_FAILED", res.status, error?.details,
+    )
 }

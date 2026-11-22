@@ -204,6 +204,7 @@ fun OrdersScreen(onBack: () -> Unit, onHome: () -> Unit, onOrder: (String) -> Un
             PullToRefreshBox(refreshing, { refreshing = true; reload++ }, Modifier.fillMaxSize()) {
                 val (active, past) = splitOrders(orders)
                 LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    item { SignedInRow(onSignedOut = onHome) }
                     if (!loaded) item { LoadingSkeleton() }
                     if (loaded && failed) item {
                         FarmCard(Modifier.fillMaxWidth()) {
@@ -249,6 +250,17 @@ fun OrdersScreen(onBack: () -> Unit, onHome: () -> Unit, onOrder: (String) -> Un
             }
         }
     }
+
+/** Who is signed in, and the way out (sign-out clears the session and the cart). */
+@Composable
+private fun SignedInRow(onSignedOut: () -> Unit) {
+    val auth by AuthManager.state.collectAsState()
+    val user = auth.user ?: return
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        FText("Signed in as ${user.name.ifEmpty { user.phone }}", variant = TextVariant.Caption, modifier = Modifier.weight(1f))
+        FarmButton("Sign out", { AuthManager.logout(); onSignedOut() }, variant = ButtonVariant.Secondary)
+    }
+}
 
 @Composable
 private fun OrderCard(order: OrderSummary, onClick: () -> Unit) {
