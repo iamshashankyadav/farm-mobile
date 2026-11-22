@@ -1,9 +1,0 @@
-{
-  "files": [],
-  "references": [
-    { "path": "packages/ui" },
-    { "path": "packages/api" },
-    { "path": "apps/customer" },
-    { "path": "apps/delivery" }
-  ]
-}

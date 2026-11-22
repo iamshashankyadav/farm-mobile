@@ -7,30 +7,31 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-typecheck:
-    name: Lint & Type-Check
+  android:
+    name: Android build and unit tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v3
+      - uses: actions/setup-java@v4
         with:
-          version: 9
+          distribution: temurin
+          java-version: 21
 
-      - uses: actions/setup-node@v4
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Debug APKs
+        run: ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Type-check
-        run: pnpm type-check
-
-      - name: Test
-        run: pnpm test
+          name: unit-test-reports
+          path: android/**/build/reports/tests/
