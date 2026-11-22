@@ -53,12 +53,37 @@ object CatalogApi {
 }
 
 object LandApi {
-    suspend fun searchPlots(lat: Double?, lng: Double?, radiusKm: Int? = null, season: String? = null, crop: String? = null): List<PlotOut> {
+    /**
+     * Open plot-seasons near a point (or in a map box when [bbox] is west, south, east, north).
+     * The reply has one feature per plot-season; [offset] pages through them.
+     */
+    suspend fun searchPlots(
+        lat: Double?,
+        lng: Double?,
+        radiusKm: Int? = null,
+        season: String? = null,
+        crop: String? = null,
+        limit: Int = 100,
+        offset: Int = 0,
+        bbox: List<Double>? = null,
+    ): PlotSearchResult {
         val res = Http.get(
             "/land/plots/search",
-            linkedMapOf("lat" to lat, "lng" to lng, "radius_km" to radiusKm, "season" to season, "crop" to crop),
+            linkedMapOf(
+                "lat" to lat, "lng" to lng, "radius_km" to radiusKm, "season" to season, "crop" to crop,
+                "west" to bbox?.getOrNull(0), "south" to bbox?.getOrNull(1),
+                "east" to bbox?.getOrNull(2), "north" to bbox?.getOrNull(3),
+                "limit" to limit, "offset" to offset,
+            ),
         )
         if (!res.ok) throw apiError(res, "Could not search plots")
+        return res.decode()
+    }
+
+    /** One plot with its description, soil and water (GET /land/plots/{id}). */
+    suspend fun getPlot(plotId: String): PlotOut {
+        val res = Http.get("/land/plots/${Http.enc(plotId)}")
+        if (!res.ok) throw apiError(res, "Could not load the plot")
         return res.decode()
     }
 

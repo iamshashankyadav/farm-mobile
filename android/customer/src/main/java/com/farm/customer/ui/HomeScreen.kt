@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.farm.core.auth.AuthManager
+import com.farm.core.api.loadErrorMessage
 import com.farm.core.ui.Banner
 import com.farm.core.ui.ButtonVariant
 import com.farm.core.ui.ErrorState
@@ -55,6 +56,7 @@ import com.farm.core.ui.FarmButton
 import com.farm.core.ui.FarmColors
 import com.farm.core.ui.TextVariant
 import com.farm.customer.browse.POPULAR_DISTRICTS
+import com.farm.customer.land.SEASON_NAMES
 import com.farm.customer.checkout.CartStore
 import com.farm.customer.land.LandFilterState
 
@@ -62,7 +64,8 @@ private val CROPS = listOf(
     "ALL" to "🌱 All", "tomato" to "🍅 Tomato", "spinach" to "🥬 Spinach", "onion" to "🧅 Onion",
     "potato" to "🥔 Potato", "okra" to "🌿 Okra", "carrot" to "🥕 Carrot", "mango" to "🥭 Mango",
 )
-private val SEASONS = listOf("ALL" to "All Seasons", "Rabi 2026-27" to "Rabi 2026-27", "Kharif 2026" to "Kharif 2026", "Zaid 2027" to "Zaid 2027")
+// The land service names its seasons Kharif, Rabi and Zaid; the chip filters on the server.
+private val SEASONS = listOf("ALL" to "All Seasons") + SEASON_NAMES.map { it to it }
 
 class HomeNav(
     val cart: () -> Unit,
@@ -128,7 +131,10 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
         FilterSheet(vm.filters, onApply = vm::updateFilters, onReset = vm::resetFilters, onClose = { filterOpen = false })
     }
     vm.reservingPlot?.let { plot ->
-        ReservationSheet(plot, onConfirm = { s, c, q -> vm.createReservation(plot, s, c, q) }, onClose = { vm.reservingPlot = null })
+        ReservationSheet(
+            plot, onConfirm = { s, c, q -> vm.createReservation(plot, s, c, q) },
+            onClose = { vm.reservingPlot = null; vm.reservingSeasonId = null }, initialSeasonId = vm.reservingSeasonId,
+        )
     }
     if (pickerOpen) {
         AlertDialog(
@@ -264,6 +270,7 @@ private fun LandTab(vm: HomeViewModel, nav: HomeNav) {
         Row(Modifier.fillMaxWidth().background(Color(0xFFF8FAFC)).padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SubTab("🗺 Explore Plots (${vm.plots.size})", vm.landSubTab == LandSubTab.EXPLORE, Modifier.weight(1f)) {
                 vm.landSubTab = LandSubTab.EXPLORE
+                vm.detailPlot = null
             }
             SubTab("🌱 My Reservations (${vm.reservations.size})", vm.landSubTab == LandSubTab.MY_RESERVATIONS, Modifier.weight(1f)) {
                 vm.landSubTab = LandSubTab.MY_RESERVATIONS
@@ -271,7 +278,14 @@ private fun LandTab(vm: HomeViewModel, nav: HomeNav) {
         }
         vm.landToast?.let { Banner(it, Color(0xFFE8F5E9), Color(0xFF1B5E20), Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
 
-        if (vm.landSubTab == LandSubTab.EXPLORE) {
+        val detail = vm.detailPlot
+        if (vm.landSubTab == LandSubTab.EXPLORE && detail != null) {
+            PlotDetailView(
+                detail,
+                onReserve = { season -> vm.reservingSeasonId = season.id; vm.reservingPlot = detail },
+                onClose = { vm.detailPlot = null },
+            )
+        } else if (vm.landSubTab == LandSubTab.EXPLORE) {
             Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 SearchBar(vm.landFilters.query, { vm.updateLandFilters(vm.landFilters.copy(query = it)) }, "Search plot title, soil, or crops...", Modifier.weight(1f))
                 SmallAction(if (vm.landMap) "📋 List" else "🗺 Map") { vm.landMap = !vm.landMap }
@@ -287,10 +301,25 @@ private fun LandTab(vm: HomeViewModel, nav: HomeNav) {
             when {
                 vm.landLoading -> LoadingSkeleton()
                 vm.landError != null -> ErrorState(vm.landError, vm::refreshLand, title = "Could not load plots")
-                plots.isEmpty() -> CenterState("🌾", "No plots match filters", null, "Reset Filters", { vm.updateLandFilters(LandFilterState()) }, secondary = true)
-                vm.landMap -> PlotMapView(plots, vm.location, onReserve = { vm.reservingPlot = it })
+                // the map stays visible when empty, so "Search this area" can still be used
+                vm.landMap -> PlotMapView(plots, vm.location, onOpen = { vm.detailPlot = it }, onSearchArea = vm::searchMapArea)
+                plots.isEmpty() -> CenterState(
+                    "🌾", "No open plots found",
+                    "Nothing open within ${vm.landFilters.radiusKm} km for these filters. Pick another season, or use the map to search another area.",
+                    "Reset Filters", { vm.updateLandFilters(LandFilterState()) }, secondary = true,
+                )
                 else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    items(plots, key = { it.id }) { p -> PlotCard(p, onReserve = { vm.reservingPlot = it }) }
+                    if (vm.searchedArea) item {
+                        FText("Showing plots in the map area you searched.", variant = TextVariant.Caption)
+                    }
+                    items(plots, key = { it.id }) { p -> PlotCard(p, onReserve = { vm.detailPlot = it }) }
+                    if (vm.landNextOffset != null) item {
+                        FarmButton(
+                            if (vm.loadingMorePlots) "Loading…" else "Load more plots", vm::loadMorePlots,
+                            Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary, enabled = !vm.loadingMorePlots,
+                        )
+                    }
+                    vm.landMoreError?.let { e -> item { FText(loadErrorMessage(e), variant = TextVariant.Caption, color = Color(0xFFC2412D)) } }
                     item { Spacer(Modifier.navigationBarsPadding()) }
                 }
             }

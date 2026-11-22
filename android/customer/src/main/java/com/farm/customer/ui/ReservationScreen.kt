@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.farm.core.api.AgreementOut
+import com.farm.core.api.ApiException
 import com.farm.core.api.CatalogApi
 import com.farm.core.api.CropUpdateOut
 import com.farm.core.api.LandApi
@@ -66,7 +69,10 @@ import com.farm.customer.orders.rupees
 import com.farm.customer.reservation.DEPOSIT_POLL_LIMIT_MS
 import com.farm.customer.reservation.DEPOSIT_POLL_MS
 import com.farm.customer.reservation.RESERVATION_STAGES
+import com.farm.customer.reservation.canCancelReservation
 import com.farm.customer.reservation.canChooseHarvest
+import com.farm.customer.reservation.cancelReservationError
+import com.farm.customer.reservation.cancelWarning
 import com.farm.customer.reservation.canPayDeposit
 import com.farm.customer.reservation.cropName
 import com.farm.customer.reservation.cropStageLabel
@@ -107,6 +113,9 @@ fun ReservationScreen(reservationId: String, onBack: () -> Unit, onHarvest: (Str
     var payError by remember { mutableStateOf<String?>(null) }
     var confirming by remember { mutableStateOf(false) }
     var confirmSlow by remember { mutableStateOf(false) }
+    var askCancel by remember { mutableStateOf(false) }
+    var cancelling by remember { mutableStateOf(false) }
+    var cancelError by remember { mutableStateOf<String?>(null) }
 
     // Load, then refresh every 30 s while the reservation is still moving, so a new crop update
     // posted on the website appears without leaving the screen.
@@ -173,7 +182,30 @@ fun ReservationScreen(reservationId: String, onBack: () -> Unit, onHarvest: (Str
         }
     }
 
+    fun cancelReservation() {
+        askCancel = false
+        cancelling = true
+        cancelError = null
+        scope.launch {
+            load { LandApi.cancelReservation(reservationId) }
+                .onSuccess { reservation = it; reload++ }
+                .onFailure { e ->
+                    cancelError = (e as? ApiException)?.let { cancelReservationError(it.code, it.message) } ?: loadErrorMessage(e)
+                }
+            cancelling = false
+        }
+    }
+
     if (!loaded) return CenteredLoading("Loading your reservation…")
+    if (askCancel) {
+        AlertDialog(
+            onDismissRequest = { askCancel = false },
+            title = { Text("Cancel this reservation?") },
+            text = { Text(cancelWarning(reservation?.status ?: "")) },
+            confirmButton = { TextButton(::cancelReservation) { Text("Cancel reservation", color = ErrorRed) } },
+            dismissButton = { TextButton({ askCancel = false }) { Text("Keep it") } },
+        )
+    }
     Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
         ScreenHeader("Your reservation", onBack)
         val r = reservation
@@ -214,6 +246,13 @@ fun ReservationScreen(reservationId: String, onBack: () -> Unit, onHarvest: (Str
                     }
                 }
                 if (r.status in GROWING) Timeline(updates, updatesError) { reload++ }
+                if (canCancelReservation(r.status) && !confirming) {
+                    cancelError?.let { Text(it, color = ErrorRed, fontSize = 13.sp) }
+                    FarmButton(
+                        if (cancelling) "Cancelling…" else "Cancel reservation", { askCancel = true },
+                        Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary, enabled = !cancelling,
+                    )
+                }
             }
         }
     }

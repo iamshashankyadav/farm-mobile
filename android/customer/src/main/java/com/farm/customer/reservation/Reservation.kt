@@ -43,6 +43,21 @@ fun nextStepText(status: String, expiresAt: String?, now: Instant = Instant.now(
     else -> status.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
 }
 
+/** The land service lets the customer cancel while the reservation is live. */
+fun canCancelReservation(status: String): Boolean = status in setOf("PENDING", "ACCEPTED", "ACTIVE", "HARVEST_READY")
+
+/** What cancelling means for the money, shown before the customer confirms. */
+fun cancelWarning(status: String): String = when (status) {
+    "PENDING", "ACCEPTED" -> "The farmer will be told. Nothing has been paid yet, so nothing is charged."
+    else -> "The farmer will be told and the season is freed. Your paid deposit is refunded."
+}
+
+/** Message for a refused POST /land/reservations/{id}/cancel. */
+fun cancelReservationError(code: String?, serverMessage: String?): String = when (code) {
+    "RESERVATION_NOT_CANCELLABLE" -> "This reservation can no longer be cancelled. Pull down to refresh."
+    else -> serverMessage ?: "Could not cancel the reservation. Try again."
+}
+
 /** The deposit can be paid once the farmer has accepted, and only for the amount the server set. */
 fun canPayDeposit(status: String, deposit: Double?): Boolean = status == "ACCEPTED" && deposit != null && deposit > 0
 

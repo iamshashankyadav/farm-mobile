@@ -77,3 +77,11 @@ what we expected. The backend owner fixes them; the apps do not work around them
    someone else (the route only checks that the caller is signed in).
    Expected: `404` (or `403`) unless the caller is the order's customer, the assigned partner or
    an admin.
+
+2. **Plots carry no village, district or farmer name.**
+   Request: `GET /land/plots/search?lat&lng&radius_km` and `GET /land/plots/{id}`.
+   Response: search features have `title, areaAcres, farmerId, plotSeasonId, season, startDate,
+   endDate, price, allowedCrops`; `PlotOut` adds `description, soilType, waterSource`. No place
+   name and no farmer name.
+   Expected (issue #41, "real village and district"): `village` and `district` on the plot (and
+   ideally the farmer's display name). Until then the app hides those rows.
