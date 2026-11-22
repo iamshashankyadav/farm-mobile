@@ -92,11 +92,11 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifie
         modifier
             .clip(RoundedCornerShape(18.dp))
             .background(if (selected) FarmColors.Primary else Color.White)
-            .border(1.dp, if (selected) FarmColors.Primary else Color(0xFFE0E0E0), RoundedCornerShape(18.dp))
+            .border(1.dp, if (selected) FarmColors.Primary else FarmColors.Border, RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
     ) {
-        Text(text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (selected) Color.White else Color(0xFF444444))
+        Text(text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (selected) Color.White else FarmColors.TextBody)
     }
 }
 
@@ -121,7 +121,7 @@ fun ListingCard(listing: ProduceListing, onOpen: () -> Unit, onAdded: (ProduceLi
     val photo = listing.photos.firstOrNull()
     val grade = gradeMeta(listing.grade)
     FarmCard(Modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(0.dp), onClick = onOpen) {
-        Box(Modifier.fillMaxWidth().height(150.dp).background(Color(0xFFF0FDF4))) {
+        Box(Modifier.fillMaxWidth().height(150.dp).background(FarmColors.PrimaryLight)) {
             if (photo != null && photo.url.isNotEmpty()) {
                 AsyncImage(model = photo.thumbUrl.ifEmpty { photo.url }, contentDescription = listing.cropName, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             } else {
@@ -129,7 +129,7 @@ fun ListingCard(listing: ProduceListing, onOpen: () -> Unit, onAdded: (ProduceLi
             }
             VerifiedBadge(photo, compact = true, modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
             Row(Modifier.align(Alignment.TopEnd).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (listing.isOrganic) Pill("🌱 Organic", Color(0xFF2D6A4F), Color.White)
+                if (listing.isOrganic) Pill("🌱 Organic", FarmColors.Primary, Color.White)
                 FavouriteButton(listing.farmId, listing.farmName)
             }
         }
@@ -144,8 +144,8 @@ fun ListingCard(listing: ProduceListing, onOpen: () -> Unit, onAdded: (ProduceLi
             FText("🏡 ${listing.farmName}", variant = TextVariant.Label, modifier = Modifier.padding(top = 6.dp))
             FarmRatingText(listing.farmRating, listing.farmRatingCount, Modifier.padding(top = 2.dp))
             Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("📍 ${formatDistance(listing.distanceM)} away", fontSize = 12.sp, color = Color(0xFF40916C), fontWeight = FontWeight.SemiBold)
-                Text("  •  ", fontSize = 12.sp, color = Color(0xFFBBBBBB))
+                Text("📍 ${formatDistance(listing.distanceM)} away", fontSize = 12.sp, color = FarmColors.Primary, fontWeight = FontWeight.SemiBold)
+                Text("  •  ", fontSize = 12.sp, color = FarmColors.InputBorder)
                 FText(formatHarvestDate(listing.harvestDate), variant = TextVariant.Caption)
             }
             Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -188,7 +188,7 @@ fun FilterSheet(filters: FilterState, onApply: (FilterState) -> Unit, onReset: (
                 }
             }
             Row(
-                Modifier.fillMaxWidth().padding(top = 18.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFF8FAF8))
+                Modifier.fillMaxWidth().padding(top = 18.dp).clip(RoundedCornerShape(10.dp)).background(FarmColors.Background)
                     .clickable { draft = draft.copy(organicOnly = !draft.organicOnly) }.padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -238,7 +238,7 @@ fun FavouriteButton(farmId: String, farmName: String, modifier: Modifier = Modif
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.size(32.dp).clip(CircleShape).background(Color(0xE6FFFFFF)), contentAlignment = Alignment.Center) {
-            Text(if (on) "♥" else "♡", fontSize = 18.sp, color = if (on) Color(0xFFC2412D) else Color(0xFF4B5258))
+            Text(if (on) "♥" else "♡", fontSize = 18.sp, color = if (on) FarmColors.Error else FarmColors.TextMuted)
         }
     }
 }
@@ -250,7 +250,7 @@ fun FarmRatingText(rating: Double?, count: Int, modifier: Modifier = Modifier) {
     Text(
         if (rating != null) "${ratingStars(rating)} ${formatRating(rating)} ($count)" else label,
         fontSize = 12.sp,
-        color = if (rating != null) Color(0xFFB7791F) else FarmColors.TextMuted,
+        color = if (rating != null) FarmColors.Warning else FarmColors.TextMuted,
         fontWeight = if (rating != null) FontWeight.SemiBold else FontWeight.Normal,
         modifier = modifier.semantics { contentDescription = if (rating != null) "Farm rated ${formatRating(rating)} out of 5 from $count ratings" else label },
     )

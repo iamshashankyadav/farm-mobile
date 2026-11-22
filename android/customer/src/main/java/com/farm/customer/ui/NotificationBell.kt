@@ -1,5 +1,7 @@
 package com.farm.customer.ui
 
+import com.farm.core.ui.FarmColors
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -40,7 +42,7 @@ private const val UNREAD_POLL_MS = 30_000L
  * last number; the inbox itself shows the error.
  */
 @Composable
-fun NotificationBell(onClick: () -> Unit, modifier: Modifier = Modifier, background: Color = Color(0xFFF5F5F0)) {
+fun NotificationBell(onClick: () -> Unit, modifier: Modifier = Modifier, background: Color = FarmColors.Background) {
     var count by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -65,7 +67,7 @@ fun NotificationBell(onClick: () -> Unit, modifier: Modifier = Modifier, backgro
         if (badge != null) {
             Box(
                 Modifier.align(Alignment.TopEnd).offset(x = (-2).dp, y = 2.dp)
-                    .clip(RoundedCornerShape(10.dp)).background(Color(0xFFC2412D))
+                    .clip(RoundedCornerShape(10.dp)).background(FarmColors.Error)
                     .padding(horizontal = 5.dp, vertical = 1.dp),
             ) { Text(badge, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold) }
         }

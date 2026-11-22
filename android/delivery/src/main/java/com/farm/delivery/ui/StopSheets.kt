@@ -85,7 +85,7 @@ private fun StopSheet(title: String, stop: RouteStop, busy: Boolean, onClose: ()
                     FText("${stop.customerName} · ${stop.address}", variant = TextVariant.Caption)
                 }
                 Box(
-                    Modifier.size(36.dp).clip(CircleShape).background(Color(0xFFEEEEEE)).clickable(enabled = !busy, onClick = onClose),
+                    Modifier.size(36.dp).clip(CircleShape).background(FarmColors.Border).clickable(enabled = !busy, onClick = onClose),
                     contentAlignment = Alignment.Center,
                 ) { Text("✕", fontSize = 16.sp, color = FarmColors.TextLabel) }
             }
@@ -100,7 +100,7 @@ private fun NotesField(value: String, onChange: (String) -> Unit, placeholder: S
         Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color.White)
             .border(1.dp, FarmColors.Border, RoundedCornerShape(8.dp)).padding(10.dp),
     ) {
-        if (value.isEmpty()) Text(placeholder, color = Color(0xFF999999), fontSize = 14.sp)
+        if (value.isEmpty()) Text(placeholder, color = FarmColors.TextMuted, fontSize = 14.sp)
         BasicTextField(value, onChange, enabled = enabled, minLines = 2, textStyle = TextStyle(fontSize = 14.sp), modifier = Modifier.fillMaxWidth())
     }
 }
@@ -116,7 +116,7 @@ fun PickupSheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (String) -> Uni
     val allChecked = stop.items.isEmpty() || checked.all { it }
 
     StopSheet("Confirm Farm Pickup", stop, submitting, onClose) {
-        error?.let { Banner("⚠️ $it", FarmColors.ErrorBg, Color(0xFFC62828)) }
+        error?.let { Banner("⚠️ $it", FarmColors.ErrorBg, FarmColors.Error) }
 
         FarmCard(Modifier.fillMaxWidth()) {
             FText("Verify Items with Farmer (${stop.items.size} items)", variant = TextVariant.Label)
@@ -125,7 +125,7 @@ fun PickupSheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (String) -> Uni
                 val on = checked[idx]
                 Row(
                     Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(8.dp))
-                        .background(if (on) Color(0xFFE8F5E9) else Color(0xFFFAFAFA))
+                        .background(if (on) FarmColors.PrimaryLight else FarmColors.Background)
                         .clickable(enabled = !submitting) { checked[idx] = !on }
                         .padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -133,13 +133,13 @@ fun PickupSheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (String) -> Uni
                     Box(
                         Modifier.size(22.dp).clip(RoundedCornerShape(4.dp))
                             .background(if (on) FarmColors.Primary else Color.White)
-                            .border(1.5.dp, if (on) FarmColors.Primary else Color(0xFFBBBBBB), RoundedCornerShape(4.dp)),
+                            .border(1.5.dp, if (on) FarmColors.Primary else FarmColors.InputBorder, RoundedCornerShape(4.dp)),
                         contentAlignment = Alignment.Center,
                     ) { if (on) Text("✓", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
                     Spacer(Modifier.width(10.dp))
                     Text(
                         item, fontSize = 15.sp,
-                        color = if (on) Color(0xFF888888) else FarmColors.TextBody,
+                        color = if (on) FarmColors.TextMuted else FarmColors.TextBody,
                         textDecoration = if (on) TextDecoration.LineThrough else null,
                     )
                 }
@@ -215,7 +215,7 @@ fun ProofOfDeliverySheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (Strin
     val canSubmit = photoUri != null && otpComplete && !submitting
 
     StopSheet("Proof of Delivery", stop, submitting, onClose) {
-        error?.let { Banner("⚠️ $it", FarmColors.ErrorBg, Color(0xFFC62828)) }
+        error?.let { Banner("⚠️ $it", FarmColors.ErrorBg, FarmColors.Error) }
 
         FarmCard(Modifier.fillMaxWidth()) {
             FText("1. Delivery Photo Proof (Required)", variant = TextVariant.Label)
@@ -233,7 +233,7 @@ fun ProofOfDeliverySheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (Strin
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     PhotoButton("📷", "Take Photo", FarmColors.Primary, Color.White, Modifier.weight(1f), !submitting, ::takePhoto)
-                    PhotoButton("🖼️", "Gallery", Color(0xFFE3F2FD), Color(0xFF1565C0), Modifier.weight(1f), !submitting, ::pickPhoto)
+                    PhotoButton("🖼️", "Gallery", FarmColors.InfoBg, FarmColors.Info, Modifier.weight(1f), !submitting, ::pickPhoto)
                 }
             }
         }
@@ -247,7 +247,7 @@ fun ProofOfDeliverySheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (Strin
                     .border(2.dp, borderColor, RoundedCornerShape(10.dp)).padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                if (otp.isEmpty()) Text("0 0 0 0", fontSize = 26.sp, color = Color(0xFFBBBBBB), letterSpacing = 8.sp)
+                if (otp.isEmpty()) Text("0 0 0 0", fontSize = 26.sp, color = FarmColors.InputBorder, letterSpacing = 8.sp)
                 BasicTextField(
                     value = otp,
                     onValueChange = { otp = it.filter(Char::isDigit).take(4) },

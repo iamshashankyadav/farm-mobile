@@ -161,10 +161,10 @@ fun formatHarvestDate(date: String): String = runCatching {
 data class GradeMeta(val label: String, val bg: String, val fg: String, val description: String)
 
 fun gradeMeta(grade: String?): GradeMeta = when (grade) {
-    "A" -> GradeMeta("Grade A", "#d8f3dc", "#1b4332", "Premium quality - highest size, uniformity and freshness standard")
-    "B" -> GradeMeta("Grade B", "#e0e7ff", "#3730a3", "Standard quality - fresh and nutritious with minor cosmetic variation")
-    "C" -> GradeMeta("Grade C", "#fef3c7", "#92400e", "Commercial grade - great for cooking, preserves and juices")
-    else -> GradeMeta("Ungraded", "#f3f4f6", "#6b7280", "Quality inspection pending")
+    "A" -> GradeMeta("Grade A", "#E3F1E9", "#155C3A", "Premium quality - highest size, uniformity and freshness standard")
+    "B" -> GradeMeta("Grade B", "#E8EEFB", "#2F5FD0", "Standard quality - fresh and nutritious with minor cosmetic variation")
+    "C" -> GradeMeta("Grade C", "#FBF3E6", "#B7791F", "Commercial grade - great for cooking, preserves and juices")
+    else -> GradeMeta("Ungraded", "#E6E9EB", "#4B5258", "Quality inspection pending")
 }
 
 data class PhotoVerification(
@@ -175,11 +175,11 @@ data class PhotoVerification(
 /** "Photos with verified badge": geo-verified means the photo was taken on the farm. */
 fun photoVerification(photo: ProducePhoto?): PhotoVerification {
     if (photo == null) {
-        return PhotoVerification(false, "Photo Unverified", "Unverified", "#f3f4f6", "#6b7280", "#d1d5db", "No GPS metadata found in photo")
+        return PhotoVerification(false, "Photo Unverified", "Unverified", "#E6E9EB", "#4B5258", "#C9CFD4", "No GPS metadata found in photo")
     }
     if (photo.isGeoVerified) {
         val dist = photo.distanceM?.let { " (${formatDistance(it)} from farm centroid)" } ?: ""
-        return PhotoVerification(true, "✓ Verified Farm Photo", "✓ Verified", "#dcfce7", "#166534", "#86efac", "GPS verified: Photo taken at the farm location$dist")
+        return PhotoVerification(true, "✓ Verified Farm Photo", "✓ Verified", "#E3F1E9", "#155C3A", "#1D7A4D", "GPS verified: Photo taken at the farm location$dist")
     }
     val desc = when {
         photo.geoStatus == "TOO_FAR" -> "Photo taken too far from farm location" +
@@ -188,7 +188,7 @@ fun photoVerification(photo: ProducePhoto?): PhotoVerification {
         photo.rejectReason != null -> photo.rejectReason
         else -> "Photo could not be verified at farm coordinates"
     }
-    return PhotoVerification(false, "⚠ Unverified Photo", "⚠ Unverified", "#fee2e2", "#991b1b", "#fca5a5", desc)
+    return PhotoVerification(false, "⚠ Unverified Photo", "⚠ Unverified", "#FBEAE7", "#C2412D", "#C2412D", desc)
 }
 
 fun cropEmoji(cropId: String): String = when (cropId) {

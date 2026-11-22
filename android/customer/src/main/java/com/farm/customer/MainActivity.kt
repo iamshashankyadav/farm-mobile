@@ -117,6 +117,7 @@ private fun CustomerNav(deepLink: MutableState<String?>) {
             HomeScreen(
                 HomeNav(
                     cart = { nav.navigate("cart") },
+                    order = { nav.navigate("order/$it") },
                     notifications = { nav.navigate("notifications") },
                     team = { nav.navigate("team") },
                     orders = { nav.navigate("orders") },

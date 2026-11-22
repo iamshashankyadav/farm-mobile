@@ -44,7 +44,7 @@ data class MapPin(
     val lng: Double,
     val title: String,
     val snippet: String? = null,
-    val color: Color = Color(0xFF1D7A4D),
+    val color: Color = FarmColors.Primary,
 )
 
 /** osmdroid needs an identifying user agent (OSM tile policy) and a writable cache. */
@@ -125,7 +125,7 @@ fun TileMap(
                     map.overlays.add(
                         Polyline(map).apply {
                             setPoints(path.map { GeoPoint(it.first, it.second) })
-                            outlinePaint.color = Color(0xFF2F5FD0).toArgb()
+                            outlinePaint.color = FarmColors.Info.toArgb()
                             outlinePaint.strokeWidth = 6f
                         },
                     )
@@ -139,7 +139,7 @@ fun TileMap(
                             snippet = pin.snippet
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                             ContextCompat.getDrawable(map.context, org.osmdroid.library.R.drawable.marker_default)?.mutate()?.let { d ->
-                                d.setTint((if (selected) Color(0xFF2F5FD0) else pin.color).toArgb())
+                                d.setTint((if (selected) FarmColors.Info else pin.color).toArgb())
                                 icon = d
                             }
                             setOnMarkerClickListener { m, _ ->
@@ -157,7 +157,7 @@ fun TileMap(
         Text(
             "© OpenStreetMap contributors",
             fontSize = 10.sp,
-            color = Color(0xFF4B5258),
+            color = FarmColors.TextMuted,
             modifier = Modifier.align(Alignment.BottomEnd).background(Color(0xCCFFFFFF)).padding(horizontal = 4.dp, vertical = 2.dp),
         )
     }

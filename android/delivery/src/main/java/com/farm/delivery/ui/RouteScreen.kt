@@ -101,7 +101,7 @@ private fun formatDay(iso: String): String = runCatching {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RouteScreen(dateParam: String?, onBack: () -> Unit, onHome: () -> Unit) {
+fun RouteScreen(dateParam: String?, onBack: (() -> Unit)?, onHome: () -> Unit) {
     val auth by AuthManager.state.collectAsState()
     val isPartner = auth.isAuthenticated && auth.hasRole("delivery")
     val context = LocalContext.current
@@ -226,8 +226,8 @@ fun RouteScreen(dateParam: String?, onBack: () -> Unit, onHome: () -> Unit) {
                         }
                         item { RouteProgress(stops.size, summary.done, routeLengthM(stops)) }
                         item { TrackingCard(pings.isTracking, pings.pingCount, pings.lastPingTime, pings.error) }
-                        toast?.let { item { Banner("✓ $it", Color(0xFFE8F5E9), Color(0xFF1B5E20), borderColor = Color(0xFFA5D6A7)) } }
-                        actionError?.let { item { Banner("⚠️ $it", FarmColors.ErrorBg, Color(0xFFC62828)) } }
+                        toast?.let { item { Banner("✓ $it", FarmColors.PrimaryLight, FarmColors.PrimaryDark, borderColor = FarmColors.Border) } }
+                        actionError?.let { item { Banner("⚠️ $it", FarmColors.ErrorBg, FarmColors.Error) } }
                         item {
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 SummaryChip(summary.pickups, "Pickups", Modifier.weight(1f))
@@ -295,7 +295,7 @@ private fun SkipDialog(stop: RouteStop, onDismiss: () -> Unit, onSkip: (String) 
                 }
             }
         },
-        confirmButton = { TextButton({ onSkip(reason) }) { Text("Skip stop", color = Color(0xFFC2412D)) } },
+        confirmButton = { TextButton({ onSkip(reason) }) { Text("Skip stop", color = FarmColors.Error) } },
         dismissButton = { TextButton(onDismiss) { Text("Keep") } },
     )
 }
@@ -309,9 +309,9 @@ private fun RouteMap(stops: List<RouteStop>, selectedId: String?, onSelect: (Str
             MapPin(
                 it.id, it.lat, it.lng, "${it.seq}. ${it.label}", it.address,
                 color = when {
-                    !it.status.open -> Color(0xFF9AA1A7)
-                    it.type == StopType.PICKUP -> Color(0xFF1D7A4D)
-                    else -> Color(0xFF2F5FD0)
+                    !it.status.open -> FarmColors.TextMuted
+                    it.type == StopType.PICKUP -> FarmColors.Primary
+                    else -> FarmColors.Info
                 },
             )
         },
@@ -339,7 +339,7 @@ private fun SummaryChip(value: Int, label: String, modifier: Modifier, color: Co
 private fun RouteProgress(total: Int, done: Int, lengthM: Double) {
     val pct = if (total > 0) Math.round(done * 100f / total) else 0
     Column {
-        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(Color(0xFFDFE3E6))) {
+        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(FarmColors.Border)) {
             Box(Modifier.fillMaxWidth(pct / 100f).height(6.dp).background(FarmColors.Primary))
         }
         FText(
@@ -356,21 +356,21 @@ private fun formatKm(m: Double): String = if (m < 1000) "${m.toInt()} m" else St
 private fun TrackingCard(isTracking: Boolean, pingCount: Int, lastPing: String?, error: String?) {
     FarmCard(Modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(12.dp), border = BorderStroke(1.dp, FarmColors.Border)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(if (isTracking) Color(0xFF2E7D32) else Color(0xFF9E9E9E)))
+            Box(Modifier.size(10.dp).clip(CircleShape).background(if (isTracking) FarmColors.Primary else FarmColors.TextMuted))
             Spacer(Modifier.width(8.dp))
             Text(
                 if (isTracking) "GPS Tracking Active" else "GPS Tracking Paused",
                 fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = FarmColors.TextDark, modifier = Modifier.weight(1f),
             )
-            Pill("30s interval", Color(0xFFE8F5E9), Color(0xFF2E7D32))
+            Pill("30s interval", FarmColors.PrimaryLight, FarmColors.Primary)
         }
         FText(
             if (isTracking) "Reporting coordinates to logistics dispatch · $pingCount pings sent${lastPing?.let { " (last: $it)" } ?: ""}"
             else "Tracking resumes automatically when pending stops exist.",
-            variant = TextVariant.Caption, color = Color(0xFF666666), modifier = Modifier.padding(top = 4.dp),
+            variant = TextVariant.Caption, color = FarmColors.TextMuted, modifier = Modifier.padding(top = 4.dp),
         )
         if (error != null) {
-            FText("⚠️ $error", variant = TextVariant.Caption, color = Color(0xFFC62828), modifier = Modifier.padding(top = 4.dp))
+            FText("⚠️ $error", variant = TextVariant.Caption, color = FarmColors.Error, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }
@@ -387,22 +387,22 @@ private fun StopCard(
     onCall: (RouteStop) -> Unit,
 ) {
     val isDone = !stop.status.open
-    val color = if (stop.type == StopType.PICKUP) Color(0xFF1B5E20) else Color(0xFF1565C0)
-    val bg = if (stop.type == StopType.PICKUP) Color(0xFFE8F5E9) else Color(0xFFE3F2FD)
+    val color = if (stop.type == StopType.PICKUP) FarmColors.PrimaryDark else FarmColors.Info
+    val bg = if (stop.type == StopType.PICKUP) FarmColors.PrimaryLight else FarmColors.InfoBg
 
     FarmCard(Modifier.fillMaxWidth().alpha(if (isDone) 0.6f else 1f)) {
         Row(verticalAlignment = Alignment.Top) {
             Box(
-                Modifier.padding(top = 2.dp).size(30.dp).clip(CircleShape).background(if (isDone) Color(0xFFCCCCCC) else color),
+                Modifier.padding(top = 2.dp).size(30.dp).clip(CircleShape).background(if (isDone) FarmColors.InputBorder else color),
                 contentAlignment = Alignment.Center,
             ) { Text("${stop.seq}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Pill(if (stop.type == StopType.PICKUP) "📦 PICKUP" else "🚪 DROP", bg, color, fontSize = 10, border = color)
-                    if (isNext) Pill("NEXT", Color(0xFFFF6F00), Color.White, fontSize = 10)
+                    if (isNext) Pill("NEXT", FarmColors.Warning, Color.White, fontSize = 10)
                     Spacer(Modifier.weight(1f))
-                    if (stop.status == StopStatus.ARRIVED) Pill("ARRIVED", Color(0xFFE8F0FC), Color(0xFF2F5FD0), fontSize = 10)
+                    if (stop.status == StopStatus.ARRIVED) Pill("ARRIVED", FarmColors.InfoBg, FarmColors.Info, fontSize = 10)
                     Text(
                         when (stop.status) { StopStatus.DONE -> "Done"; StopStatus.SKIPPED -> "Skipped"; StopStatus.ARRIVED -> "At stop"; else -> "Pending" },
                         fontSize = 12.sp, color = FarmColors.TextLabel,
@@ -410,7 +410,7 @@ private fun StopCard(
                 }
                 Text(
                     stop.label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-                    color = if (isDone) Color(0xFF888888) else FarmColors.TextDark,
+                    color = if (isDone) FarmColors.TextMuted else FarmColors.TextDark,
                     textDecoration = if (isDone) TextDecoration.LineThrough else null,
                     modifier = Modifier.padding(top = 3.dp),
                 )
@@ -419,20 +419,20 @@ private fun StopCard(
         FText("📍 ${stop.address}", variant = TextVariant.Caption, color = FarmColors.TextLabel, modifier = Modifier.padding(vertical = 8.dp))
 
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFFFAFAFA))
-                .border(1.dp, Color(0xFFEEEEEE), RoundedCornerShape(8.dp)).padding(10.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(FarmColors.Background)
+                .border(1.dp, FarmColors.Border, RoundedCornerShape(8.dp)).padding(10.dp),
         ) {
             FText("Items", variant = TextVariant.Label)
-            stop.items.forEach { FText("• $it", variant = TextVariant.Caption, color = Color(0xFF444444), modifier = Modifier.padding(top = 2.dp)) }
+            stop.items.forEach { FText("• $it", variant = TextVariant.Caption, color = FarmColors.TextBody, modifier = Modifier.padding(top = 2.dp)) }
         }
 
         stop.notes?.let {
             Column(
-                Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFFFF8E6))
-                    .border(1.dp, Color(0xFFF0D9A8), RoundedCornerShape(8.dp)).padding(10.dp),
+                Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(FarmColors.WarningBg)
+                    .border(1.dp, FarmColors.Border, RoundedCornerShape(8.dp)).padding(10.dp),
             ) {
-                FText("Notes", variant = TextVariant.Label, color = Color(0xFF8A5A12))
-                FText(it, variant = TextVariant.Caption, color = Color(0xFF5C3D0C), modifier = Modifier.padding(top = 2.dp))
+                FText("Notes", variant = TextVariant.Label, color = FarmColors.Warning)
+                FText(it, variant = TextVariant.Caption, color = FarmColors.TextDark, modifier = Modifier.padding(top = 2.dp))
             }
         }
 

@@ -25,19 +25,19 @@ import kotlin.math.sqrt
 data class StatusMeta(val label: String, val color: String, val bg: String, val emoji: String)
 
 val STATUS_META = mapOf(
-    "PLACED" to StatusMeta("Order Placed", "#1565c0", "#e3f2fd", "🧾"),
-    "CONFIRMED" to StatusMeta("Confirmed", "#6a1b9a", "#f3e5f5", "✅"),
-    "PACKED" to StatusMeta("Packed", "#e65100", "#fff3e0", "📦"),
-    "QC_PASSED" to StatusMeta("Quality Checked", "#e65100", "#fff3e0", "🔎"),
-    "READY_FOR_DISPATCH" to StatusMeta("Ready to Dispatch", "#f9a825", "#fffde7", "🚜"),
-    "POOLED" to StatusMeta("Ready to Dispatch", "#f9a825", "#fffde7", "🚜"),
-    "IN_TRANSIT" to StatusMeta("Out for Delivery", "#00695c", "#e0f2f1", "🚚"),
-    "DELIVERED" to StatusMeta("Delivered", "#2d6a4f", "#e8f5e9", "🎉"),
-    "COMPLETED" to StatusMeta("Delivered", "#2d6a4f", "#e8f5e9", "🎉"),
-    "CANCELLED" to StatusMeta("Cancelled", "#c62828", "#ffebee", "❌"),
+    "PLACED" to StatusMeta("Order Placed", "#2F5FD0", "#E8EEFB", "🧾"),
+    "CONFIRMED" to StatusMeta("Confirmed", "#2F5FD0", "#E8EEFB", "✅"),
+    "PACKED" to StatusMeta("Packed", "#B7791F", "#FBF3E6", "📦"),
+    "QC_PASSED" to StatusMeta("Quality Checked", "#B7791F", "#FBF3E6", "🔎"),
+    "READY_FOR_DISPATCH" to StatusMeta("Ready to Dispatch", "#B7791F", "#FBF3E6", "🚜"),
+    "POOLED" to StatusMeta("Ready to Dispatch", "#B7791F", "#FBF3E6", "🚜"),
+    "IN_TRANSIT" to StatusMeta("Out for Delivery", "#1D7A4D", "#E3F1E9", "🚚"),
+    "DELIVERED" to StatusMeta("Delivered", "#1D7A4D", "#E3F1E9", "🎉"),
+    "COMPLETED" to StatusMeta("Delivered", "#1D7A4D", "#E3F1E9", "🎉"),
+    "CANCELLED" to StatusMeta("Cancelled", "#C2412D", "#FBEAE7", "❌"),
 )
 
-fun statusMeta(status: String) = STATUS_META[status] ?: StatusMeta(status.replace('_', ' '), "#475569", "#f1f5f9", "📍")
+fun statusMeta(status: String) = STATUS_META[status] ?: StatusMeta(status.replace('_', ' '), "#4B5258", "#E6E9EB", "📍")
 
 // ─── Status rail (same eight stages as the website's StatusRail) ────────────────
 

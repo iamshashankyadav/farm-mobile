@@ -85,7 +85,7 @@ import com.farm.customer.reservation.reservationStage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val ErrorRed = Color(0xFFC2412D)
+private val ErrorRed = FarmColors.Error
 
 /** Statuses after which the farmer posts crop updates. */
 private val GROWING = setOf("ACTIVE", "HARVEST_READY", "FULFILLING")
@@ -238,7 +238,7 @@ fun ReservationScreen(reservationId: String, onBack: () -> Unit, onHarvest: (Str
                     }
                     canPayDeposit(r.status, r.deposit) -> DepositCard(r.deposit ?: 0.0, paying, payError, confirmSlow) { payDeposit(r) }
                     canChooseHarvest(r.status) -> FarmCard(
-                        Modifier.fillMaxWidth(), background = Color(0xFFF1F8F4), border = BorderStroke(1.dp, Color(0xFFC8E6C9)),
+                        Modifier.fillMaxWidth(), background = FarmColors.PrimaryLight, border = BorderStroke(1.dp, FarmColors.PrimaryLight),
                     ) {
                         FText("Your harvest passed its quality check", variant = TextVariant.H2, fontSize = 17.sp)
                         FText("Have it delivered to you, or let the farmer buy it back.", variant = TextVariant.Caption)
@@ -300,7 +300,7 @@ private fun DepositCard(deposit: Double, paying: Boolean, error: String?, slow: 
         FText("The farmer accepted your request. The deposit of ${rupees(deposit)} confirms the season; the balance is paid at harvest.", variant = TextVariant.Caption)
         FText("This is a test payment: no real money is taken.", variant = TextVariant.Caption)
         if (slow) {
-            FText("We are still waiting for the confirmation. Pull down to refresh in a moment.", variant = TextVariant.Caption, color = Color(0xFFB7791F), modifier = Modifier.padding(top = 6.dp))
+            FText("We are still waiting for the confirmation. Pull down to refresh in a moment.", variant = TextVariant.Caption, color = FarmColors.Warning, modifier = Modifier.padding(top = 6.dp))
         }
         error?.let { Text(it, color = ErrorRed, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
         FarmButton(
@@ -351,7 +351,7 @@ private fun CropPhoto(mediaId: String) {
         load { CatalogApi.getMedia(mediaId) }.onSuccess { media = it }.onFailure { failed = true }
     }
     Box(
-        Modifier.fillMaxWidth().padding(top = 10.dp).height(170.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFE6E9EB)),
+        Modifier.fillMaxWidth().padding(top = 10.dp).height(170.dp).clip(RoundedCornerShape(10.dp)).background(FarmColors.Subtle),
         contentAlignment = Alignment.Center,
     ) {
         val m = media
@@ -364,8 +364,8 @@ private fun CropPhoto(mediaId: String) {
         if (m != null) {
             Pill(
                 (if (m.isGeoVerified) "✓ " else "! ") + photoBadge(m.isGeoVerified),
-                if (m.isGeoVerified) Color(0xFFE8F5E9) else Color(0xFFFFF4E0),
-                if (m.isGeoVerified) Color(0xFF1D7A4D) else Color(0xFF8A5A12),
+                if (m.isGeoVerified) FarmColors.PrimaryLight else FarmColors.WarningBg,
+                if (m.isGeoVerified) FarmColors.Primary else FarmColors.Warning,
                 Modifier.align(Alignment.TopStart).padding(8.dp),
             )
         }

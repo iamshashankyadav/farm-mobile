@@ -31,7 +31,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-enum class HomeTab { PRODUCE, LAND }
+/** The bottom-bar destinations of the customer app. */
+enum class HomeTab { PRODUCE, LAND, ORDERS, PROFILE }
 enum class LandSubTab { EXPLORE, MY_RESERVATIONS }
 
 /** State of the home screen: the Produce tab (useProduceBrowse) and the Land tab (useLand). */

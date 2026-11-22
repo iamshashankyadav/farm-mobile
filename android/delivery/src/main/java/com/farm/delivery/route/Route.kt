@@ -120,3 +120,11 @@ fun localIsoDate(d: LocalDate = LocalDate.now()): String = d.toString()
 fun mapsUrl(lat: Double, lng: Double, label: String): String =
     "https://www.google.com/maps/dir/?api=1&destination=$lat,$lng" +
         "&destination_place_id=${java.net.URLEncoder.encode(label, "UTF-8")}&travelmode=driving"
+
+/** [count] days before [today], newest first (the History tab). */
+fun pastDays(today: LocalDate, count: Int): List<LocalDate> = (1..count).map { today.minusDays(it.toLong()) }
+
+/** "Yesterday", else "Mon, 16 Nov". */
+fun dayLabel(day: LocalDate, today: LocalDate): String =
+    if (day == today.minusDays(1)) "Yesterday"
+    else day.format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH))

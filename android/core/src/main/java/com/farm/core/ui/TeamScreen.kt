@@ -77,7 +77,7 @@ fun TeamScreen(onBack: () -> Unit, title: String = "Our Team") {
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(16.dp),
         ) {
             // Mentor card
-            FarmCard(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, Color(0xFFE8F0E8))) {
+            FarmCard(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, FarmColors.PrimaryLight)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier.size(68.dp).clip(CircleShape).background(FarmColors.PrimaryLight)
@@ -91,13 +91,13 @@ fun TeamScreen(onBack: () -> Unit, title: String = "Our Team") {
                         FText(guide.role, fontSize = 13.sp, color = FarmColors.TextLabel)
                     }
                 }
-                HorizontalDivider(Modifier.padding(vertical = 14.dp), color = Color(0xFFEEEEEE))
+                HorizontalDivider(Modifier.padding(vertical = 14.dp), color = FarmColors.Border)
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFFF8FAF8)).padding(12.dp),
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(FarmColors.Background).padding(12.dp),
                 ) {
                     Text("“", fontSize = 28.sp, color = FarmColors.Primary, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(6.dp))
-                    Text(guide.thanks, fontSize = 14.sp, lineHeight = 20.sp, fontStyle = FontStyle.Italic, color = Color(0xFF2C3E50))
+                    Text(guide.thanks, fontSize = 14.sp, lineHeight = 20.sp, fontStyle = FontStyle.Italic, color = FarmColors.TextDark)
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -108,13 +108,13 @@ fun TeamScreen(onBack: () -> Unit, title: String = "Our Team") {
                     Spacer(Modifier.width(10.dp))
                     Column {
                         FText(team.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = FarmColors.TextDark)
-                        FText(team.about, fontSize = 13.sp, color = Color(0xFF666666))
+                        FText(team.about, fontSize = 13.sp, color = FarmColors.TextMuted)
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     team.members.forEach { m ->
                         val lead = m.role.lowercase().contains("lead")
-                        FarmCard(Modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(14.dp), border = BorderStroke(1.dp, Color(0xFFE5E7EB))) {
+                        FarmCard(Modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(14.dp), border = BorderStroke(1.dp, FarmColors.Border)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(Modifier.size(40.dp).clip(CircleShape).background(FarmColors.PrimaryLight), contentAlignment = Alignment.Center) {
                                     Text(m.name.take(1).uppercase(), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = FarmColors.Primary)
@@ -124,15 +124,15 @@ fun TeamScreen(onBack: () -> Unit, title: String = "Our Team") {
                                     FText(m.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = FarmColors.TextDark)
                                     Pill(
                                         m.role,
-                                        if (lead) Color(0xFFFEF3C7) else Color(0xFFF3F4F6),
-                                        if (lead) Color(0xFF92400E) else Color(0xFF4B5563),
+                                        if (lead) FarmColors.WarningBg else FarmColors.Subtle,
+                                        if (lead) FarmColors.Warning else FarmColors.TextMuted,
                                         Modifier.padding(top = 3.dp),
                                     )
                                 }
                             }
-                            FText(m.built, fontSize = 13.sp, lineHeight = 18.sp, color = Color(0xFF444444), modifier = Modifier.padding(top = 8.dp, bottom = 10.dp))
+                            FText(m.built, fontSize = 13.sp, lineHeight = 18.sp, color = FarmColors.TextBody, modifier = Modifier.padding(top = 8.dp, bottom = 10.dp))
                             Row(
-                                Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xFFF3F4F6))
+                                Modifier.clip(RoundedCornerShape(6.dp)).background(FarmColors.Subtle)
                                     .clickable {
                                         runCatching {
                                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/${m.github}")))
@@ -143,7 +143,7 @@ fun TeamScreen(onBack: () -> Unit, title: String = "Our Team") {
                             ) {
                                 Text("🐙", fontSize = 14.sp)
                                 Spacer(Modifier.width(4.dp))
-                                Text("@${m.github}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF2563EB))
+                                Text("@${m.github}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FarmColors.Info)
                             }
                         }
                     }

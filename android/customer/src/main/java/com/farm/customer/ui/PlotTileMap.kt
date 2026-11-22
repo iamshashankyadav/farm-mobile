@@ -1,5 +1,7 @@
 package com.farm.customer.ui
 
+import com.farm.core.ui.FarmColors
+
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -109,7 +111,7 @@ fun PlotTileMap(
         Text(
             "© OpenStreetMap contributors",
             fontSize = 10.sp,
-            color = Color(0xFF4B5258),
+            color = FarmColors.TextMuted,
             modifier = Modifier.align(Alignment.BottomEnd).background(Color(0xCCFFFFFF)).padding(horizontal = 4.dp, vertical = 2.dp),
         )
     }

@@ -140,11 +140,11 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
 
     Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
         ScreenHeader("Produce Details", onBack) {
-            Text("🛒 ${cart.items.size}", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onCart).padding(6.dp))
+            Text("🛒 ${cart.items.size}", color = FarmColors.Primary, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onCart).padding(6.dp))
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (l.photos.isEmpty()) {
-                Box(Modifier.fillMaxWidth().height(230.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF0FDF4))) {
+                Box(Modifier.fillMaxWidth().height(230.dp).clip(RoundedCornerShape(14.dp)).background(FarmColors.PrimaryLight)) {
                     Text("No photos yet", color = FarmColors.TextMuted, modifier = Modifier.align(Alignment.Center))
                     if (l.isOrganic) Pill("🌱 Organic", FarmColors.Primary, Color.White, Modifier.align(Alignment.TopEnd).padding(10.dp), fontSize = 12)
                 }
@@ -152,7 +152,7 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
                 // Every photo of the listing, each marked verified on the farm or "Unverified".
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(l.photos, key = { it.id }) { p ->
-                        Box(Modifier.fillParentMaxWidth(if (l.photos.size == 1) 1f else 0.85f).height(230.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF0FDF4))) {
+                        Box(Modifier.fillParentMaxWidth(if (l.photos.size == 1) 1f else 0.85f).height(230.dp).clip(RoundedCornerShape(14.dp)).background(FarmColors.PrimaryLight)) {
                             AsyncImage(p.url, "${l.cropName} photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                             VerifiedBadge(p, compact = true, modifier = Modifier.align(Alignment.TopStart).padding(10.dp))
                             if (l.isOrganic) Pill("🌱 Organic", FarmColors.Primary, Color.White, Modifier.align(Alignment.TopEnd).padding(10.dp), fontSize = 12)
@@ -178,7 +178,7 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
                     Spacer(Modifier.weight(1f))
                     Pill("${qtyText(l.qtyAvailable)} ${l.unit} in stock", FarmColors.PrimaryLight, FarmColors.Primary)
                 }
-                l.description?.let { FText(it, color = Color(0xFF444444), modifier = Modifier.padding(top = 10.dp)) }
+                l.description?.let { FText(it, color = FarmColors.TextBody, modifier = Modifier.padding(top = 10.dp)) }
                 Text(
                     "🔍 ${grade.description}", fontSize = 12.sp, color = hex(grade.fg),
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(hex(grade.bg)).padding(10.dp),
@@ -196,7 +196,7 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
                 InfoRow("📅", "Harvest Date", formatHarvestDate(l.harvestDate))
             }
             added?.let {
-                Banner(it, Color(0xFFE8F5E9), Color(0xFF1B5E20)) {
+                Banner(it, FarmColors.PrimaryLight, FarmColors.PrimaryDark) {
                     Text("View Cart →", color = FarmColors.Primary, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.clickable(onClick = onCart))
                 }
             }
@@ -238,7 +238,7 @@ private fun InfoRow(icon: String, label: String, value: String) {
 @Composable
 fun StepButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(34.dp).clip(CircleShape).background(Color(0xFFF0FDF4)).border(1.dp, Color(0xFFBBF7D0), CircleShape)
+        Modifier.size(34.dp).clip(CircleShape).background(FarmColors.PrimaryLight).border(1.dp, FarmColors.Border, CircleShape)
             .alpha(if (enabled) 1f else 0.35f).clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Text(label, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = FarmColors.Primary) }
@@ -251,7 +251,7 @@ fun CartScreen(onBack: () -> Unit, onBrowse: () -> Unit, onCheckout: () -> Unit)
     val notice = remember { CartStore.notice.also { CartStore.notice = null } }
     Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
         ScreenHeader("Your cart", onBack)
-        notice?.let { Banner(it, Color(0xFFFFF8E6), Color(0xFF8A5A12), Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) }
+        notice?.let { Banner(it, FarmColors.WarningBg, FarmColors.Warning, Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) }
         if (groups.isEmpty()) {
             Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 FText("Your cart is empty", variant = TextVariant.H2)
@@ -273,7 +273,7 @@ fun CartScreen(onBack: () -> Unit, onBrowse: () -> Unit, onCheckout: () -> Unit)
                             StepButton("−", true) { CartStore.setQty(item.listingId, item.qty - 1) }
                             Text(formatQty(item.qty), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp))
                             StepButton("+", item.maxQty == null || item.qty < item.maxQty) { CartStore.setQty(item.listingId, item.qty + 1) }
-                            Text("Remove", fontSize = 12.sp, color = Color(0xFFC62828), modifier = Modifier.clickable { CartStore.remove(item.listingId) }.padding(start = 10.dp))
+                            Text("Remove", fontSize = 12.sp, color = FarmColors.Error, modifier = Modifier.clickable { CartStore.remove(item.listingId) }.padding(start = 10.dp))
                         }
                     }
                     FText("Subtotal ${formatRupees(g.subtotal)}", variant = TextVariant.Label, modifier = Modifier.align(Alignment.End).padding(top = 10.dp))
@@ -390,8 +390,8 @@ private fun SummaryLine(label: String, value: String, bold: Boolean = false) {
 
 @Composable
 private fun CheckoutErrorCard(e: CheckoutError, cart: com.farm.customer.checkout.Cart, onLogin: () -> Unit) {
-    FarmCard(Modifier.fillMaxWidth(), background = Color(0xFFFFF5F5), border = BorderStroke(1.dp, Color(0xFFFFCDD2))) {
-        Text(e.message, color = Color(0xFFC62828), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+    FarmCard(Modifier.fillMaxWidth(), background = FarmColors.ErrorBg, border = BorderStroke(1.dp, FarmColors.ErrorBg)) {
+        Text(e.message, color = FarmColors.Error, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         when (e) {
             is CheckoutError.Stock -> {
                 e.shortages.forEach { s ->

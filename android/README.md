@@ -132,6 +132,18 @@ never commit it) and rebuild. Without the file the app builds and runs without p
 inbox works either way. The backend currently sends pushes through the Expo push service only,
 which cannot deliver to an FCM token (see `NOTES.md`, Backend issues).
 
+## Design
+
+Both apps use the Ledger tokens from the website (`FarmColors`, `FarmDimens`, `FarmFonts` and
+`FarmTheme` in `core/.../ui/Components.kt`): grey `#F2F4F5` background, white cards with a 1 dp
+`#DFE3E6` border, green `#1D7A4D` actions, 12 dp cards, 8 dp controls, 48 dp touch targets.
+Screen titles are Instrument Serif, everything else Instrument Sans; both are bundled in
+`core/src/main/res/font` (SIL Open Font License, `FONTS-OFL.txt`). Light theme only: the tokens
+define no dark palette. Hindi text falls back to the system Devanagari font until #49 adds Mukta.
+
+Navigation: the customer app has a bottom bar (Produce, Land, Orders, Profile) with cart and
+notifications in the top bar; the delivery app has Route, History and Profile.
+
 ## Differences from the React Native version
 
 - Push uses FCM instead of Expo push tokens (see "Push notifications" above).

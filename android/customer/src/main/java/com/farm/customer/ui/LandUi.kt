@@ -94,22 +94,22 @@ fun PlotCard(plot: PlotItem, onReserve: (PlotItem) -> Unit) {
                 FText(placeLine(plot), variant = TextVariant.Caption, modifier = Modifier.padding(top = 2.dp))
             }
             Column(
-                Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xFFF0FDFA)).border(1.dp, Color(0xFF99F6E4), RoundedCornerShape(10.dp))
+                Modifier.clip(RoundedCornerShape(10.dp)).background(FarmColors.PrimaryLight).border(1.dp, FarmColors.Border, RoundedCornerShape(10.dp))
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(qtyText(plot.areaAcres), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F766E))
-                Text("Acres", fontSize = 10.sp, color = Color(0xFF0F766E))
+                Text(qtyText(plot.areaAcres), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = FarmColors.Primary)
+                Text("Acres", fontSize = 10.sp, color = FarmColors.Primary)
             }
         }
         if (plot.soilType != null || plot.waterSource != null) {
             Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                plot.soilType?.let { Pill("🌱 Soil: $it", Color(0xFFF5F5F0), Color(0xFF555555)) }
-                plot.waterSource?.let { Pill("💧 $it", Color(0xFFEFF6FF), Color(0xFF1D4ED8)) }
+                plot.soilType?.let { Pill("🌱 Soil: $it", FarmColors.Background, FarmColors.TextMuted) }
+                plot.waterSource?.let { Pill("💧 $it", FarmColors.InfoBg, FarmColors.Info) }
             }
         }
-        plot.description?.let { FText(it, maxLines = 2, color = Color(0xFF555555), fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp)) }
-        Column(Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFFAFAF7)).padding(10.dp)) {
+        plot.description?.let { FText(it, maxLines = 2, color = FarmColors.TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp)) }
+        Column(Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(10.dp)).background(FarmColors.Background).padding(10.dp)) {
             FText("Available Seasons (${plot.seasons.size})", variant = TextVariant.Label)
             plot.seasons.forEach { s ->
                 Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -129,7 +129,7 @@ fun PlotCard(plot: PlotItem, onReserve: (PlotItem) -> Unit) {
                 }
             }
             Box(
-                Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xFF0F766E)).clickable { onReserve(plot) }
+                Modifier.clip(RoundedCornerShape(10.dp)).background(FarmColors.Primary).clickable { onReserve(plot) }
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             ) { Text("Reserve Plot →", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
         }
@@ -157,7 +157,7 @@ fun PlotMapView(
                         FText(selected.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = FarmColors.TextDark)
                         FText(placeLine(selected), variant = TextVariant.Caption)
                     }
-                    Pill("${qtyText(selected.areaAcres)} Acres", Color(0xFFF0FDFA), Color(0xFF0F766E))
+                    Pill("${qtyText(selected.areaAcres)} Acres", FarmColors.PrimaryLight, FarmColors.Primary)
                 }
                 FText(
                     "Seasons: " + selected.seasons.joinToString(" · ") { "${it.season} (${formatRupees(it.pricePerKg)}/kg)" },
@@ -166,7 +166,7 @@ fun PlotMapView(
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         FText("Starting from", variant = TextVariant.Caption)
-                        FText("${formatRupees(selected.minPrice ?: 0.0)}/kg", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F766E))
+                        FText("${formatRupees(selected.minPrice ?: 0.0)}/kg", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = FarmColors.Primary)
                     }
                     FarmButton("View plot →", { onOpen(selected) })
                 }
@@ -261,8 +261,8 @@ fun ReservationSheet(
                 val sel = season?.id == s.id
                 Row(
                     Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(10.dp))
-                        .background(if (sel) Color(0xFFF0FDF4) else Color.White)
-                        .border(1.5.dp, if (sel) FarmColors.Primary else Color(0xFFE5E7EB), RoundedCornerShape(10.dp))
+                        .background(if (sel) FarmColors.PrimaryLight else Color.White)
+                        .border(1.5.dp, if (sel) FarmColors.Primary else FarmColors.Border, RoundedCornerShape(10.dp))
                         .clickable {
                             season = s
                             if (crop !in s.allowedCrops) crop = s.allowedCrops.firstOrNull() ?: crop
@@ -285,30 +285,30 @@ fun ReservationSheet(
             FText("3. Expected Target Harvest (kg)", variant = TextVariant.Label, modifier = Modifier.padding(top = 16.dp))
             FarmInput(qtyText, { qtyText = it }, placeholder = "Enter kg (e.g. 100, 250)", keyboardType = KeyboardType.Decimal)
 
-            FarmCard(Modifier.fillMaxWidth().padding(top = 10.dp), background = Color(0xFFF8FAF8), border = BorderStroke(1.dp, Color(0xFFDCFCE7))) {
+            FarmCard(Modifier.fillMaxWidth().padding(top = 10.dp), background = FarmColors.Background, border = BorderStroke(1.dp, FarmColors.PrimaryLight)) {
                 FText("Reservation Agreement Summary", variant = TextVariant.Label, modifier = Modifier.padding(bottom = 8.dp))
                 SummaryRow("Plot Season", season?.season ?: "-")
                 SummaryRow("Selected Crop", if (crop.isEmpty()) "-" else cropTitle(crop))
                 SummaryRow("Rate per kg", "${formatRupees(season?.pricePerKg ?: 0.0)}/kg")
-                HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color(0xFFE5E7EB))
+                HorizontalDivider(Modifier.padding(vertical = 8.dp), color = FarmColors.Border)
                 Row(Modifier.fillMaxWidth()) {
                     FText("Estimated Total Commitment", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     FText(formatRupees(total), fontWeight = FontWeight.Bold)
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        FText("Initial Deposit (20%)", variant = TextVariant.Label, color = Color(0xFF166534))
-                        FText("Due upon farmer acceptance", variant = TextVariant.Caption, color = Color(0xFF166534))
+                        FText("Initial Deposit (20%)", variant = TextVariant.Label, color = FarmColors.PrimaryDark)
+                        FText("Due upon farmer acceptance", variant = TextVariant.Caption, color = FarmColors.PrimaryDark)
                     }
-                    FText(formatRupees(deposit), variant = TextVariant.H2, color = Color(0xFF166534))
+                    FText(formatRupees(deposit), variant = TextVariant.H2, color = FarmColors.PrimaryDark)
                 }
             }
             FText(
                 "ℹ️ The farmer prepares the land, applies organic fertilizer, and posts photo verification updates throughout the growth cycle. At harvest, you can request fresh doorstep delivery or guaranteed buy-back.",
-                fontSize = 12.sp, color = Color(0xFF555555),
-                modifier = Modifier.padding(top = 12.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFEFF6FF)).padding(10.dp),
+                fontSize = 12.sp, color = FarmColors.TextMuted,
+                modifier = Modifier.padding(top = 12.dp).clip(RoundedCornerShape(8.dp)).background(FarmColors.InfoBg).padding(10.dp),
             )
-            error?.let { Text(it, color = Color(0xFFC2412D), fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp)) }
+            error?.let { Text(it, color = FarmColors.Error, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp)) }
             Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FarmButton("Cancel", onClose, Modifier.weight(1f), variant = ButtonVariant.Secondary, enabled = !submitting)
                 FarmButton(
@@ -344,9 +344,9 @@ private fun SummaryRow(label: String, value: String) {
 @Composable
 private fun reservationStatusPill(status: String) {
     val (bg, fg) = when (status) {
-        "HARVEST_READY" -> Color(0xFFF3E8FF) to Color(0xFF7E22CE)
-        "ACTIVE" -> Color(0xFFDCFCE7) to Color(0xFF15803D)
-        else -> Color(0xFFFEF3C7) to Color(0xFFB45309)
+        "HARVEST_READY" -> FarmColors.InfoBg to FarmColors.Info
+        "ACTIVE" -> FarmColors.PrimaryLight to FarmColors.Primary
+        else -> FarmColors.WarningBg to FarmColors.Warning
     }
     Pill(status.replace('_', ' '), bg, fg)
 }

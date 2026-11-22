@@ -41,7 +41,7 @@ private fun DeliveryNav() {
             DeliveryHomeScreen(
                 onLogin = { nav.navigate("login") },
                 onTeam = { nav.navigate("team") },
-                onRoute = { nav.navigate("route") },
+                onRoute = { date -> nav.navigate(if (date == null) "route" else "route?date=$date") },
             )
         }
         composable("login") {
