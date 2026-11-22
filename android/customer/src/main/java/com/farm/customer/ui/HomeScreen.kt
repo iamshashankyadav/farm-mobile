@@ -48,7 +48,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.farm.core.auth.AuthManager
 import com.farm.core.ui.Banner
 import com.farm.core.ui.ButtonVariant
+import com.farm.core.ui.ErrorState
 import com.farm.core.ui.FText
+import com.farm.core.ui.LoadingSkeleton
 import com.farm.core.ui.FarmButton
 import com.farm.core.ui.FarmColors
 import com.farm.core.ui.TextVariant
@@ -69,7 +71,6 @@ class HomeNav(
     val orders: () -> Unit,
     val login: () -> Unit,
     val listing: (String) -> Unit,
-    val harvest: (String) -> Unit,
     /** Opens one reservation from the server (deposit, status, crop timeline). */
     val reservation: (String) -> Unit,
 )
@@ -220,14 +221,6 @@ private fun CenterState(emoji: String, title: String, subtitle: String?, action:
 }
 
 @Composable
-private fun LoadingState(text: String, color: Color = FarmColors.Primary) {
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        CircularProgressIndicator(color = color)
-        FText(text, variant = TextVariant.Caption, modifier = Modifier.padding(top = 10.dp))
-    }
-}
-
-@Composable
 private fun ProduceTab(vm: HomeViewModel, nav: HomeNav, onFilter: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -251,9 +244,9 @@ private fun ProduceTab(vm: HomeViewModel, nav: HomeNav, onFilter: () -> Unit) {
             Text("🔄 Refresh", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FarmColors.Primary, modifier = Modifier.clickable { vm.refreshProduce() }.padding(4.dp))
         }
         when {
-            vm.produceLoading -> LoadingState("Finding produce near you...")
-            vm.produceError != null -> CenterState("⚠️", "Something went wrong", vm.produceError, "Try Again", vm::refreshProduce)
-            listings.isEmpty() -> CenterState("🔍", "No produce found", null, "Reset Filters", vm::resetFilters, secondary = true)
+            vm.produceLoading -> LoadingSkeleton()
+            vm.produceError != null -> ErrorState(vm.produceError, vm::refreshProduce, title = "Could not load produce")
+            listings.isEmpty() -> CenterState("🔍", "No produce found", "Nothing within ${vm.filters.radiusKm} km matches. Widen the radius or reset the filters.", "Reset Filters", vm::resetFilters, secondary = true)
             vm.produceMap -> ProduceMapView(listings, vm.location, onOpen = { nav.listing(it.id) }, onAdded = vm::onAddedToCart)
             else -> LazyColumn(
                 Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -271,7 +264,6 @@ private fun LandTab(vm: HomeViewModel, nav: HomeNav) {
         Row(Modifier.fillMaxWidth().background(Color(0xFFF8FAFC)).padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SubTab("🗺 Explore Plots (${vm.plots.size})", vm.landSubTab == LandSubTab.EXPLORE, Modifier.weight(1f)) {
                 vm.landSubTab = LandSubTab.EXPLORE
-                vm.timelineReservation = null
             }
             SubTab("🌱 My Reservations (${vm.reservations.size})", vm.landSubTab == LandSubTab.MY_RESERVATIONS, Modifier.weight(1f)) {
                 vm.landSubTab = LandSubTab.MY_RESERVATIONS
@@ -293,8 +285,8 @@ private fun LandTab(vm: HomeViewModel, nav: HomeNav) {
             }
             val plots = vm.plots
             when {
-                vm.landLoading -> LoadingState("Finding agricultural plots near you...", Color(0xFF0F766E))
-                vm.landError != null -> CenterState("⚠️", "Unable to load plots", vm.landError, "Try Again", vm::refreshLand)
+                vm.landLoading -> LoadingSkeleton()
+                vm.landError != null -> ErrorState(vm.landError, vm::refreshLand, title = "Could not load plots")
                 plots.isEmpty() -> CenterState("🌾", "No plots match filters", null, "Reset Filters", { vm.updateLandFilters(LandFilterState()) }, secondary = true)
                 vm.landMap -> PlotMapView(plots, vm.location, onReserve = { vm.reservingPlot = it })
                 else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -303,11 +295,10 @@ private fun LandTab(vm: HomeViewModel, nav: HomeNav) {
                 }
             }
         } else {
-            val timeline = vm.timelineReservation
-            if (timeline != null) {
-                CropTimelineView(timeline, onClose = { vm.timelineReservation = null }, onHarvest = nav.harvest)
-            } else {
-                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            when {
+                vm.landLoading -> LoadingSkeleton()
+                vm.reservationsError != null -> ErrorState(vm.reservationsError, vm::refreshLand, title = "Could not load your reservations")
+                else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                     MyReservationsList(vm.reservations, onSelect = { nav.reservation(it.id) }, onExplore = { vm.landSubTab = LandSubTab.EXPLORE })
                 }
             }

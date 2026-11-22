@@ -1,14 +1,10 @@
 package com.farm.customer.orders
 
-import com.farm.core.api.ApiConfig
-import com.farm.core.api.ApiException
 import com.farm.core.api.DeliveryAddress
-import com.farm.core.api.NetworkException
 import com.farm.core.api.OrderEvent
 import com.farm.core.api.OrderSummary
 import com.farm.core.api.PaymentRecord
 import com.farm.core.api.Track
-import kotlinx.serialization.SerializationException
 import java.text.NumberFormat
 import java.time.Duration
 import java.time.Instant
@@ -42,30 +38,6 @@ val STATUS_META = mapOf(
 )
 
 fun statusMeta(status: String) = STATUS_META[status] ?: StatusMeta(status.replace('_', ' '), "#475569", "#f1f5f9", "📍")
-
-// ─── Loading ────────────────────────────────────────────────────────────────
-
-/**
- * Runs one API load and keeps the failures a screen can show: no connection, an HTTP error, or a
- * reply the app cannot read. Anything else (and coroutine cancellation, so leaving a screen stops
- * its polling) is not caught here.
- */
-inline fun <T> load(block: () -> T): Result<T> = try {
-    Result.success(block())
-} catch (e: NetworkException) {
-    Result.failure(e)
-} catch (e: ApiException) {
-    Result.failure(e)
-} catch (e: SerializationException) {
-    Result.failure(e)
-}
-
-/** What to tell the customer when [load] failed. */
-fun loadErrorMessage(e: Throwable?, baseUrl: String = ApiConfig.baseUrl): String = when (e) {
-    is NetworkException -> "Cannot reach the server at $baseUrl. Check your connection and try again."
-    is SerializationException -> "The server sent a reply the app could not read."
-    else -> e?.message ?: "Something went wrong. Try again."
-}
 
 // ─── Status rail (same eight stages as the website's StatusRail) ────────────────
 

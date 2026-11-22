@@ -1,5 +1,6 @@
 package com.farm.delivery.ui
 
+import android.content.ActivityNotFoundException
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -52,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.farm.core.api.LogisticsApi
+import com.farm.core.api.load
+import com.farm.core.api.loadErrorMessage
 import com.farm.core.api.MediaApi
 import com.farm.core.ui.Banner
 import com.farm.core.ui.ButtonVariant
@@ -64,6 +67,7 @@ import com.farm.delivery.route.RouteStop
 import com.farm.delivery.route.newPhotoUri
 import com.farm.delivery.route.readPhotoAsJpeg
 import kotlinx.coroutines.launch
+import java.io.IOException
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -153,14 +157,9 @@ fun PickupSheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (String) -> Uni
                 submitting = true
                 error = null
                 scope.launch {
-                    try {
-                        LogisticsApi.submitPickup(stop.id, notes.trim().ifEmpty { null })
-                        onSuccess(stop.id)
-                        onClose()
-                    } catch (e: Exception) {
-                        error = e.message ?: "Pickup confirmation failed"
-                        submitting = false
-                    }
+                    load { LogisticsApi.submitPickup(stop.id, notes.trim().ifEmpty { null }) }
+                        .onSuccess { onSuccess(stop.id); onClose() }
+                        .onFailure { error = loadErrorMessage(it); submitting = false }
                 }
             },
             Modifier.fillMaxWidth(), loading = submitting, enabled = allChecked && !submitting,
@@ -198,8 +197,12 @@ fun ProofOfDeliverySheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (Strin
             val uri = newPhotoUri(context)
             pendingCameraUri = uri
             camera.launch(uri)
-        } catch (e: Exception) {
-            error = e.message ?: "Failed to launch camera"
+        } catch (e: ActivityNotFoundException) {
+            error = "No camera app found on this device. Pick a photo from the gallery instead."
+        } catch (e: IOException) {
+            error = e.message ?: "Could not prepare a file for the photo"
+        } catch (e: IllegalArgumentException) {
+            error = e.message ?: "Could not prepare a file for the photo"
         }
     }
     fun pickPhoto() = gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -278,16 +281,27 @@ fun ProofOfDeliverySheet(stop: RouteStop, onClose: () -> Unit, onSuccess: (Strin
                 submitting = true
                 error = null
                 scope.launch {
-                    try {
-                        val bytes = readPhotoAsJpeg(context, uri)
+                    // the photo is read first; a failed read or upload shows its real error and nothing is
+                    // delivered (no made-up media id)
+                    val bytes = try {
+                        readPhotoAsJpeg(context, uri)
+                    } catch (e: IOException) {
+                        error = e.message ?: "Could not read the photo"; null
+                    } catch (e: IllegalStateException) { // the image could not be decoded
+                        error = e.message ?: "Could not read the photo"; null
+                    } catch (e: SecurityException) { // access to the picked photo was revoked
+                        error = "The app may no longer read this photo. Take or pick it again."; null
+                    }
+                    if (bytes == null) {
+                        submitting = false
+                        return@launch
+                    }
+                    load {
                         val mediaId = MediaApi.uploadDeliveryPhoto(bytes, "image/jpeg", stop.id)
                         LogisticsApi.submitDelivery(stop.id, otp, mediaId, notes.trim().ifEmpty { null })
-                        onSuccess(stop.id)
-                        onClose()
-                    } catch (e: Exception) {
-                        error = e.message ?: "Delivery submission failed"
-                        submitting = false
                     }
+                        .onSuccess { onSuccess(stop.id); onClose() }
+                        .onFailure { error = loadErrorMessage(it); submitting = false }
                 }
             },
             Modifier.fillMaxWidth(), loading = submitting, enabled = canSubmit,

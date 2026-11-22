@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
-import java.time.Instant
 
 /** Session kept in app-private storage (replaces expo-secure-store). */
 object AuthStorage {
@@ -157,7 +156,7 @@ object AuthManager {
                 if (token != null && user != null) {
                     Http.authToken = token
                     _state.update { it.copy(user = user, accessToken = token) }
-                    if (!token.startsWith("mock-token-")) verifyStoredSession()
+                    verifyStoredSession()
                 }
             } finally {
                 _state.update { it.copy(isLoading = false) }
@@ -259,26 +258,6 @@ object AuthManager {
                 _state.update { it.copy(user = null, accessToken = null, error = null) }
             }
         }
-    }
-
-    /** Dev helper: a local session for the given role, for demos without the backend. */
-    fun devMockLogin(role: String): User {
-        val user = User(
-            id = "dev-user-$role-001",
-            name = if (role == "delivery") "Dev Rider Suresh" else "Dev Customer Anita",
-            phone = if (role == "delivery") "+919876543211" else "+919876543210",
-            email = "$role@farm.local",
-            roles = listOf(role),
-            phoneVerified = true,
-            createdAt = Instant.now().toString(),
-        )
-        val token = "mock-token-$role-${System.currentTimeMillis()}"
-        AuthStorage.accessToken = token
-        AuthStorage.refreshToken = "mock-refresh-$token"
-        AuthStorage.user = user
-        Http.authToken = token
-        _state.update { it.copy(user = user, accessToken = token, error = null) }
-        return user
     }
 }
 

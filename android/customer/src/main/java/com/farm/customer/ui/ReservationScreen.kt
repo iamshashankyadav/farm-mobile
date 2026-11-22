@@ -60,8 +60,8 @@ import com.farm.core.ui.TextVariant
 import com.farm.customer.checkout.formatQty
 import com.farm.customer.orders.formatDate
 import com.farm.customer.orders.formatDateTime
-import com.farm.customer.orders.load
-import com.farm.customer.orders.loadErrorMessage
+import com.farm.core.api.load
+import com.farm.core.api.loadErrorMessage
 import com.farm.customer.orders.rupees
 import com.farm.customer.reservation.DEPOSIT_POLL_LIMIT_MS
 import com.farm.customer.reservation.DEPOSIT_POLL_MS
@@ -259,7 +259,7 @@ private fun DepositCard(deposit: Double, paying: Boolean, error: String?, slow: 
     FarmCard(Modifier.fillMaxWidth()) {
         FText("Pay the deposit", variant = TextVariant.H2, fontSize = 18.sp)
         FText("The farmer accepted your request. The deposit of ${rupees(deposit)} confirms the season; the balance is paid at harvest.", variant = TextVariant.Caption)
-        FText("Payment is simulated: no real money is taken.", variant = TextVariant.Caption)
+        FText("This is a test payment: no real money is taken.", variant = TextVariant.Caption)
         if (slow) {
             FText("We are still waiting for the confirmation. Pull down to refresh in a moment.", variant = TextVariant.Caption, color = Color(0xFFB7791F), modifier = Modifier.padding(top = 6.dp))
         }

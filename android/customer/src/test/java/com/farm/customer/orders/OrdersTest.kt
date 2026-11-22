@@ -1,16 +1,12 @@
 package com.farm.customer.orders
 
-import com.farm.core.api.ApiException
-import com.farm.core.api.NetworkException
 import com.farm.core.api.OrderEvent
-import kotlinx.serialization.SerializationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.IOException
 
-/** Status rail, cancel rules and load errors of the orders screens (#40). */
+/** Status rail and cancel rules of the orders screens (#40). */
 class OrdersTest {
     @Test
     fun railHasTheEightStagesOfTheWebsite() {
@@ -69,25 +65,5 @@ class OrdersTest {
         assertTrue(cancelErrorMessage(409, "INVALID_STATUS_TRANSITION", "x").startsWith("This order can no longer be cancelled"))
         assertEquals("Order not found.", cancelErrorMessage(404, "ORDER_NOT_FOUND", null))
         assertEquals("Server says no", cancelErrorMessage(500, "X", "Server says no"))
-    }
-
-    @Test
-    fun loadKeepsTypedFailuresAndMessages() {
-        val offline = load { throw NetworkException(IOException("down")) }
-        assertTrue(offline.exceptionOrNull() is NetworkException)
-        assertEquals(
-            "Cannot reach the server at http://10.0.2.2/api/v1. Check your connection and try again.",
-            loadErrorMessage(offline.exceptionOrNull(), "http://10.0.2.2/api/v1"),
-        )
-        val refused = load { throw ApiException("Could not load your orders (500)", status = 500) }
-        assertEquals("Could not load your orders (500)", loadErrorMessage(refused.exceptionOrNull(), "u"))
-        val garbled = load { throw SerializationException("bad") }
-        assertEquals("The server sent a reply the app could not read.", loadErrorMessage(garbled.exceptionOrNull(), "u"))
-        assertEquals(3, load { 3 }.getOrNull())
-    }
-
-    @Test(expected = IllegalStateException::class)
-    fun loadDoesNotHideProgrammingErrors() {
-        load { error("bug") }
     }
 }

@@ -1,9 +1,8 @@
 package com.farm.customer.browse
 
-import android.content.Context
 import com.farm.core.api.CatalogApi
-import com.farm.core.api.Http
 import com.farm.core.api.MediaOut
+import com.farm.core.api.load
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -178,60 +177,45 @@ fun cropEmoji(cropId: String): String = when (cropId) {
     else -> "🥕"
 }
 
-// ─── Data: catalog service, falling back to the seed listings when it is unreachable ────────
+// ─── Data: the catalog service only. A failed call throws; nothing is invented. ─────────────
 
 object BrowseRepository {
-    private var seeds: List<ProduceListing> = emptyList()
-
-    fun init(context: Context) {
-        seeds = runCatching {
-            Http.json.decodeFromString<List<ProduceListing>>(context.assets.open("seed_listings.json").bufferedReader().readText())
-        }.getOrDefault(emptyList())
-    }
-
     private fun MediaOut.toPhoto() = ProducePhoto(
         id = id, url = url ?: thumbUrl ?: "", thumbUrl = thumbUrl ?: url ?: "",
         isGeoVerified = isGeoVerified, geoStatus = geoStatus, distanceM = distanceM, rejectReason = rejectReason,
     )
 
-    /** Nearby produce (GET /catalog/listings/search), or the seeds with distances from [lat],[lng]. */
+    /**
+     * Nearby produce (GET /catalog/listings/search). Throws [com.farm.core.api.NetworkException] or
+     * [com.farm.core.api.ApiException] on failure. A photo that cannot be loaded is left out.
+     */
     suspend fun fetchNearby(lat: Double, lng: Double, radiusKm: Int, crop: String?, organic: Boolean?): List<ProduceListing> {
-        try {
-            val geo = CatalogApi.searchListings(lat, lng, radiusKm = radiusKm, crop = crop, organic = organic)
-            return geo.features.map { f ->
-                val p = f.properties
-                val coords = f.geometry?.coordinates?.takeIf { it.size >= 2 } ?: listOf(lng, lat)
-                val photos = p.mediaIds.firstOrNull()?.let { id -> runCatching { listOf(CatalogApi.getMedia(id).toPhoto()) }.getOrNull() } ?: emptyList()
-                ProduceListing(
-                    id = p.id, farmId = p.farmId, farmName = p.farmName, farmerId = p.farmerId, cropId = p.cropId,
-                    cropName = p.cropName, variety = p.variety, unit = p.unit, pricePerUnit = p.pricePerUnit,
-                    qtyAvailable = p.qtyAvailable, harvestDate = p.harvestDate, grade = p.grade, isOrganic = p.isOrganic,
-                    description = p.description, distanceM = p.distanceM, district = p.district, village = p.village,
-                    status = p.status, pickupCoordinates = coords, mediaIds = p.mediaIds, photos = photos,
-                )
-            }
-        } catch (_: Exception) {
-            // Graceful fallback to the seed dataset
+        val geo = CatalogApi.searchListings(lat, lng, radiusKm = radiusKm, crop = crop, organic = organic)
+        return geo.features.map { f ->
+            val p = f.properties
+            val coords = f.geometry?.coordinates?.takeIf { it.size >= 2 } ?: listOf(lng, lat)
+            val photos = p.mediaIds.firstOrNull()?.let { id -> load { listOf(CatalogApi.getMedia(id).toPhoto()) }.getOrNull() } ?: emptyList()
+            ProduceListing(
+                id = p.id, farmId = p.farmId, farmName = p.farmName, farmerId = p.farmerId, cropId = p.cropId,
+                cropName = p.cropName, variety = p.variety, unit = p.unit, pricePerUnit = p.pricePerUnit,
+                qtyAvailable = p.qtyAvailable, harvestDate = p.harvestDate, grade = p.grade, isOrganic = p.isOrganic,
+                description = p.description, distanceM = p.distanceM, district = p.district, village = p.village,
+                status = p.status, pickupCoordinates = coords, mediaIds = p.mediaIds, photos = photos,
+            )
         }
-        return seeds.map { s -> s.copy(distanceM = haversineM(lat, lng, s.pickupCoordinates[1], s.pickupCoordinates[0])) }
     }
 
-    /** One listing (GET /catalog/listings/{id}), or the matching seed. */
+    /** One listing (GET /catalog/listings/{id}). Throws on failure. */
     suspend fun fetchDetail(listingId: String): ProduceListing {
-        try {
-            val out = CatalogApi.getListing(listingId)
-            val photos = out.mediaIds.mapNotNull { id -> runCatching { CatalogApi.getMedia(id).toPhoto() }.getOrNull() }
-            return ProduceListing(
-                id = out.id, farmId = out.farmId, farmName = out.farmName, farmerId = out.farmerId, cropId = out.cropId,
-                cropName = out.cropName, variety = out.variety, unit = out.unit, pricePerUnit = out.pricePerUnit,
-                qtyAvailable = out.qtyAvailable, harvestDate = out.harvestDate, grade = out.grade, isOrganic = out.isOrganic,
-                description = out.description, distanceM = 0.0, district = out.district, village = out.village,
-                status = out.status, pickupCoordinates = out.pickupLocation?.coordinates ?: listOf(0.0, 0.0),
-                mediaIds = out.mediaIds, photos = photos,
-            )
-        } catch (_: Exception) {
-            // Fallback to the seed listing
-        }
-        return seeds.find { it.id == listingId } ?: throw IllegalStateException("Listing $listingId not found")
+        val out = CatalogApi.getListing(listingId)
+        val photos = out.mediaIds.mapNotNull { id -> load { CatalogApi.getMedia(id).toPhoto() }.getOrNull() }
+        return ProduceListing(
+            id = out.id, farmId = out.farmId, farmName = out.farmName, farmerId = out.farmerId, cropId = out.cropId,
+            cropName = out.cropName, variety = out.variety, unit = out.unit, pricePerUnit = out.pricePerUnit,
+            qtyAvailable = out.qtyAvailable, harvestDate = out.harvestDate, grade = out.grade, isOrganic = out.isOrganic,
+            description = out.description, distanceM = 0.0, district = out.district, village = out.village,
+            status = out.status, pickupCoordinates = out.pickupLocation?.coordinates ?: listOf(0.0, 0.0),
+            mediaIds = out.mediaIds, photos = photos,
+        )
     }
 }

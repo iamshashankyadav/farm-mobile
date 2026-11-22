@@ -59,16 +59,21 @@ import com.farm.customer.browse.LocationCoords
 import com.farm.customer.browse.ProducePhoto
 import com.farm.customer.browse.formatDistance
 import com.farm.customer.checkout.formatRupees
-import com.farm.customer.land.ALL_STAGES
 import com.farm.customer.land.PlotItem
+import com.farm.customer.reservation.nextStepText
+import com.farm.core.api.load
+import com.farm.core.api.loadErrorMessage
 import com.farm.customer.land.PlotSeasonItem
 import com.farm.customer.land.ReservationItem
 import com.farm.customer.land.reservationEstimate
-import com.farm.customer.land.stageMeta
 import com.farm.customer.orders.LatLng
 import kotlinx.coroutines.launch
 
 private fun cap(s: String) = s.replaceFirstChar { it.uppercase() }
+
+/** "📍 Village, District · 2.3 km away", leaving out what the API did not return. */
+private fun placeLine(plot: PlotItem): String =
+    "📍 " + (listOf(plot.village, plot.district).filter { it.isNotEmpty() } + "${formatDistance(plot.distanceM)} away").joinToString(" · ")
 
 @Composable
 fun PlotCard(plot: PlotItem, onReserve: (PlotItem) -> Unit) {
@@ -76,7 +81,7 @@ fun PlotCard(plot: PlotItem, onReserve: (PlotItem) -> Unit) {
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
                 FText(plot.title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = FarmColors.TextDark)
-                FText("📍 ${plot.village}, ${plot.district} (${formatDistance(plot.distanceM)} away)", variant = TextVariant.Caption, modifier = Modifier.padding(top = 2.dp))
+                FText(placeLine(plot), variant = TextVariant.Caption, modifier = Modifier.padding(top = 2.dp))
             }
             Column(
                 Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xFFF0FDFA)).border(1.dp, Color(0xFF99F6E4), RoundedCornerShape(10.dp))
@@ -87,9 +92,11 @@ fun PlotCard(plot: PlotItem, onReserve: (PlotItem) -> Unit) {
                 Text("Acres", fontSize = 10.sp, color = Color(0xFF0F766E))
             }
         }
-        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("🌱 Soil: ${plot.soilType}", Color(0xFFF5F5F0), Color(0xFF555555))
-            Pill("💧 ${plot.waterSource}", Color(0xFFEFF6FF), Color(0xFF1D4ED8))
+        if (plot.soilType != null || plot.waterSource != null) {
+            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                plot.soilType?.let { Pill("🌱 Soil: $it", Color(0xFFF5F5F0), Color(0xFF555555)) }
+                plot.waterSource?.let { Pill("💧 $it", Color(0xFFEFF6FF), Color(0xFF1D4ED8)) }
+            }
         }
         plot.description?.let { FText(it, maxLines = 2, color = Color(0xFF555555), fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp)) }
         Column(Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFFAFAF7)).padding(10.dp)) {
@@ -106,8 +113,10 @@ fun PlotCard(plot: PlotItem, onReserve: (PlotItem) -> Unit) {
         }
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                FText("Farmer Partner", variant = TextVariant.Caption)
-                FText("👨‍🌾 ${plot.farmerName}", variant = TextVariant.Label)
+                if (plot.farmerName.isNotEmpty()) {
+                    FText("Farmer", variant = TextVariant.Caption)
+                    FText("👨‍🌾 ${plot.farmerName}", variant = TextVariant.Label)
+                }
             }
             Box(
                 Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xFF0F766E)).clickable { onReserve(plot) }
@@ -135,11 +144,13 @@ fun PlotMapView(plots: List<PlotItem>, location: LocationCoords, onReserve: (Plo
                 Row(verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f)) {
                         FText(selected.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = FarmColors.TextDark)
-                        FText("🏡 ${selected.village}, ${selected.district} · ${formatDistance(selected.distanceM)} away", variant = TextVariant.Caption)
+                        FText(placeLine(selected), variant = TextVariant.Caption)
                     }
                     Pill("${qtyText(selected.areaAcres)} Acres", Color(0xFFF0FDFA), Color(0xFF0F766E))
                 }
-                FText("🌱 ${selected.soilType}    💧 ${selected.waterSource}", fontSize = 12.sp, color = FarmColors.TextLabel, modifier = Modifier.padding(top = 6.dp))
+                listOfNotNull(selected.soilType?.let { "🌱 $it" }, selected.waterSource?.let { "💧 $it" }).takeIf { it.isNotEmpty() }?.let {
+                    FText(it.joinToString("    "), fontSize = 12.sp, color = FarmColors.TextLabel, modifier = Modifier.padding(top = 6.dp))
+                }
                 FText(
                     "Seasons: " + selected.seasons.joinToString(" · ") { "${it.season} (${formatRupees(it.pricePerKg)}/kg)" },
                     fontSize = 11.sp, color = FarmColors.TextMuted, modifier = Modifier.padding(top = 4.dp),
@@ -165,6 +176,7 @@ fun ReservationSheet(plot: PlotItem, onConfirm: suspend (PlotSeasonItem, String,
     var crop by remember(plot.id) { mutableStateOf(plot.seasons.firstOrNull()?.allowedCrops?.firstOrNull() ?: "tomato") }
     var qtyText by remember { mutableStateOf("100") }
     var submitting by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
     val qty = qtyText.toDoubleOrNull() ?: 0.0
     val (deposit, total) = reservationEstimate(season?.pricePerKg ?: 0.0, qty)
 
@@ -225,6 +237,7 @@ fun ReservationSheet(plot: PlotItem, onConfirm: suspend (PlotSeasonItem, String,
                 fontSize = 12.sp, color = Color(0xFF555555),
                 modifier = Modifier.padding(top = 12.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFEFF6FF)).padding(10.dp),
             )
+            error?.let { Text(it, color = Color(0xFFC2412D), fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp)) }
             Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FarmButton("Cancel", onClose, Modifier.weight(1f), variant = ButtonVariant.Secondary, enabled = !submitting)
                 FarmButton(
@@ -233,13 +246,13 @@ fun ReservationSheet(plot: PlotItem, onConfirm: suspend (PlotSeasonItem, String,
                         val s = season ?: return@FarmButton
                         if (qty <= 0) return@FarmButton
                         submitting = true
+                        error = null
                         scope.launch {
-                            try {
-                                onConfirm(s, crop, qty)
-                                onClose()
-                            } finally {
-                                submitting = false
-                            }
+                            // a refused reservation shows the server's reason and creates nothing
+                            load { onConfirm(s, crop, qty) }
+                                .onSuccess { onClose() }
+                                .onFailure { error = loadErrorMessage(it) }
+                            submitting = false
                         }
                     },
                     Modifier.weight(1f), enabled = !submitting && qty > 0 && season != null,
@@ -283,115 +296,24 @@ fun MyReservationsList(reservations: List<ReservationItem>, onSelect: (Reservati
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         reservations.forEach { res ->
-            val latest = res.updates.lastOrNull()
-            val meta = stageMeta(latest?.stage ?: "SOWN")
             FarmCard(Modifier.fillMaxWidth(), onClick = { onSelect(res) }) {
                 Row(verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f)) {
                         FText(res.cropName, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = FarmColors.TextDark)
-                        FText("🏡 ${res.plotTitle} (${res.seasonName})", variant = TextVariant.Caption)
+                        listOf(res.plotTitle, res.seasonName).filter { it.isNotEmpty() }.takeIf { it.isNotEmpty() }?.let {
+                            FText("🏡 ${it.joinToString(" · ")}", variant = TextVariant.Caption)
+                        }
                     }
                     reservationStatusPill(res.status)
                 }
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(10.dp)).background(hex(meta.bg)).padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(meta.icon, fontSize = 22.sp)
-                    Spacer(Modifier.width(8.dp))
-                    Column {
-                        Text("Current Stage: ${latest?.stageTitle?.ifEmpty { null } ?: meta.label}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = hex(meta.color))
-                        Text(latest?.note ?: "Field preparation underway", fontSize = 12.sp, color = Color(0xFF555555), maxLines = 1)
-                    }
-                }
+                FText(nextStepText(res.status, res.expiresAt), variant = TextVariant.Caption, color = FarmColors.TextBody, modifier = Modifier.padding(top = 8.dp))
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) { FText("Target Harvest", variant = TextVariant.Caption); FText("${qtyText(res.expectedQtyKg)} kg", variant = TextVariant.Label) }
-                    Column(Modifier.weight(1f)) { FText("Deposit Paid", variant = TextVariant.Caption); FText(formatRupees(res.deposit), variant = TextVariant.Label) }
-                    Pill("Track Timeline →", FarmColors.PrimaryLight, FarmColors.Primary, fontSize = 12)
+                    if (res.deposit > 0) Column(Modifier.weight(1f)) { FText("Deposit", variant = TextVariant.Caption); FText(formatRupees(res.deposit), variant = TextVariant.Label) }
+                    Pill("Open →", FarmColors.PrimaryLight, FarmColors.Primary, fontSize = 12)
                 }
             }
         }
     }
 }
 
-@Composable
-fun CropTimelineView(reservation: ReservationItem, onClose: () -> Unit, onHarvest: (String) -> Unit) {
-    val active = stageMeta(if (reservation.status == "HARVEST_READY") "HARVEST_READY" else reservation.updates.lastOrNull()?.stage ?: "SOWN")
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        FarmCard(Modifier.fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.Top) {
-                Column(Modifier.weight(1f)) {
-                    FText("Reservation ID: ${reservation.id}", variant = TextVariant.Caption)
-                    FText(reservation.cropName, variant = TextVariant.H1, fontSize = 24.sp)
-                    FText("🏡 ${reservation.plotTitle} (${reservation.seasonName})", variant = TextVariant.Caption)
-                }
-                Pill(reservation.status.replace('_', ' '), hex(active.bg), hex(active.color))
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                Column(Modifier.weight(1f)) { FText("Target Harvest", variant = TextVariant.Caption); FText("${qtyText(reservation.expectedQtyKg)} kg", variant = TextVariant.Label) }
-                Column(Modifier.weight(1f)) { FText("Deposit Paid", variant = TextVariant.Caption); FText(formatRupees(reservation.deposit), variant = TextVariant.Label) }
-                Column(Modifier.weight(1f)) { FText("Farmer Contact", variant = TextVariant.Caption); FText(reservation.farmerName, variant = TextVariant.Label) }
-            }
-        }
-
-        // Stepper
-        Row(Modifier.fillMaxWidth().padding(vertical = 18.dp), verticalAlignment = Alignment.Top) {
-            ALL_STAGES.forEachIndexed { i, stg ->
-                val meta = stageMeta(stg)
-                val reached = meta.step <= active.step
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(64.dp)) {
-                    Box(
-                        Modifier.size(if (meta.step == active.step) 44.dp else 38.dp).clip(CircleShape)
-                            .background(if (reached) hex(meta.color) else Color.White)
-                            .border(2.dp, if (reached) hex(meta.color) else Color(0xFFD1D5DB), CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) { Text(meta.icon, fontSize = 18.sp) }
-                    Text(meta.label.split(" ").first(), fontSize = 10.sp, fontWeight = if (reached) FontWeight.Bold else FontWeight.Normal,
-                        color = if (reached) FarmColors.TextDark else Color(0xFF9CA3AF), modifier = Modifier.padding(top = 4.dp))
-                }
-                if (i < ALL_STAGES.size - 1) {
-                    Box(Modifier.weight(1f).padding(top = 20.dp).height(3.dp).background(if (meta.step < active.step) FarmColors.Primary else Color(0xFFE5E7EB)))
-                }
-            }
-        }
-
-        if (reservation.status == "HARVEST_READY") {
-            FarmCard(Modifier.fillMaxWidth().padding(bottom = 14.dp), background = Color(0xFFFAF5FF), border = BorderStroke(1.dp, Color(0xFFE9D5FF))) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🎉", fontSize = 28.sp)
-                    Spacer(Modifier.width(10.dp))
-                    Column {
-                        FText("Your Crop is Ready for Harvest!", variant = TextVariant.H2, fontSize = 17.sp, color = Color(0xFF6B21A8))
-                        FText("Once the inspection passes, choose how you want to receive it:", variant = TextVariant.Caption)
-                    }
-                }
-                FarmButton("Choose delivery or buy-back", { onHarvest(reservation.id) }, Modifier.fillMaxWidth().padding(top = 12.dp))
-            }
-        }
-
-        FText("Growth Timeline & Field Updates", variant = TextVariant.H2, fontSize = 18.sp, modifier = Modifier.padding(bottom = 10.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            reservation.updates.forEach { u ->
-                val meta = stageMeta(u.stage)
-                FarmCard(Modifier.fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Pill("${meta.icon} ${u.stageTitle.ifEmpty { meta.label }}", hex(meta.bg), hex(meta.color), Modifier.weight(1f, fill = false), fontSize = 12)
-                        Spacer(Modifier.weight(1f))
-                        FText(u.createdAt, variant = TextVariant.Caption)
-                    }
-                    u.note?.let { Text("“$it”", fontStyle = FontStyle.Italic, fontSize = 14.sp, color = Color(0xFF374151), modifier = Modifier.padding(top = 8.dp)) }
-                    u.photos.forEach { p ->
-                        Box(Modifier.fillMaxWidth().padding(top = 10.dp).height(170.dp).clip(RoundedCornerShape(10.dp))) {
-                            AsyncImage(model = p.url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().background(Color(0xFFF0FDF4)))
-                            VerifiedBadge(
-                                ProducePhoto(p.id, p.url, p.thumbUrl, p.isGeoVerified, if (p.isGeoVerified) "VERIFIED" else "NO_GPS", p.distanceM),
-                                compact = true, modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        FarmButton("← Back to Land Plots", onClose, Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 20.dp), variant = ButtonVariant.Secondary)
-    }
-}

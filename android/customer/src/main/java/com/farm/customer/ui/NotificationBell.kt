@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.farm.core.api.NotificationApi
 import com.farm.customer.notifications.badgeText
-import com.farm.customer.orders.load
+import com.farm.core.api.load
 import kotlinx.coroutines.delay
 
 /** How often the bell asks for the unread count while it is on screen (the website uses 30 s too). */

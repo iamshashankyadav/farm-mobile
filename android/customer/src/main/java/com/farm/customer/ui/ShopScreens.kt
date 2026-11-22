@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -45,10 +46,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.farm.core.api.ApiException
 import com.farm.core.api.Checkout
+import com.farm.core.api.load
 import com.farm.core.ui.Banner
 import com.farm.core.ui.ButtonVariant
 import com.farm.core.ui.CenteredLoading
+import com.farm.core.ui.EmptyState
+import com.farm.core.ui.ErrorState
 import com.farm.core.ui.FText
 import com.farm.core.ui.FarmButton
 import com.farm.core.ui.FarmCard
@@ -87,18 +92,16 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
     val cart by CartStore.cart.collectAsState()
     var listing by remember { mutableStateOf<ProduceListing?>(null) }
     var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<Throwable?>(null) }
+    var reload by remember { mutableIntStateOf(0) }
     var qty by remember { mutableDoubleStateOf(1.0) }
     var added by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(listingId) {
-        try {
-            listing = BrowseRepository.fetchDetail(listingId)
-        } catch (e: Exception) {
-            error = e.message ?: "Failed to load produce listing"
-        } finally {
-            loading = false
-        }
+    LaunchedEffect(listingId, reload) {
+        load { BrowseRepository.fetchDetail(listingId) }
+            .onSuccess { listing = it; error = null }
+            .onFailure { error = it }
+        loading = false
     }
     LaunchedEffect(added) { if (added != null) { delay(4000); added = null } }
 
@@ -106,10 +109,12 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
     val l = listing
     if (l == null) {
         Column(Modifier.fillMaxSize().background(FarmColors.Background).padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("⚠️", fontSize = 40.sp)
-            FText("Listing not found", variant = TextVariant.H2)
-            FText(error ?: "This listing may have been removed or sold out.", variant = TextVariant.Caption, textAlign = TextAlign.Center)
-            FarmButton("Back to Produce", onBack, Modifier.padding(top = 16.dp))
+            if ((error as? ApiException)?.status == 404) {
+                EmptyState("Listing not found", "This listing may have been removed or sold out.", icon = "🔍")
+            } else {
+                ErrorState(error, { loading = true; reload++ }, title = "Could not load this listing")
+            }
+            FarmButton("Back to Produce", onBack, Modifier.padding(top = 16.dp), variant = ButtonVariant.Secondary)
         }
         return
     }

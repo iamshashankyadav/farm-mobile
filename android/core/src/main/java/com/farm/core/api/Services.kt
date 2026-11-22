@@ -35,19 +35,19 @@ object CatalogApi {
                 "sort" to sort, "limit" to limit, "cursor" to cursor,
             ),
         )
-        if (!res.ok) throw ApiException("Failed to search listings: ${res.status}", status = res.status)
+        if (!res.ok) throw apiError(res, "Could not search produce")
         return res.decode()
     }
 
     suspend fun getListing(listingId: String): ListingOut {
         val res = Http.get("/catalog/listings/${Http.enc(listingId)}")
-        if (!res.ok) throw ApiException("Failed to get listing $listingId: ${res.status}", status = res.status)
+        if (!res.ok) throw apiError(res, "Could not load the listing")
         return res.decode()
     }
 
     suspend fun getMedia(mediaId: String): MediaOut {
         val res = Http.get("/media/${Http.enc(mediaId)}")
-        if (!res.ok) throw ApiException("Failed to get media $mediaId: ${res.status}", status = res.status)
+        if (!res.ok) throw apiError(res, "Could not load the photo")
         return res.decode()
     }
 }
@@ -58,19 +58,19 @@ object LandApi {
             "/land/plots/search",
             linkedMapOf("lat" to lat, "lng" to lng, "radius_km" to radiusKm, "season" to season, "crop" to crop),
         )
-        if (!res.ok) throw ApiException("Failed to search plots: ${res.status}", status = res.status)
+        if (!res.ok) throw apiError(res, "Could not search plots")
         return res.decode()
     }
 
     suspend fun createReservation(body: ReservationCreate): ReservationOut {
         val res = Http.post("/land/reservations", Http.encode(body))
-        if (!res.ok) throw ApiException("Failed to create reservation: ${res.status}", status = res.status)
+        if (!res.ok) throw apiError(res, "Could not reserve the plot")
         return res.decode()
     }
 
     suspend fun getMyReservations(): List<ReservationOut> {
         val res = Http.get("/land/reservations/mine")
-        if (!res.ok) throw ApiException("Failed to get my reservations: ${res.status}", status = res.status)
+        if (!res.ok) throw apiError(res, "Could not load your reservations")
         return res.decode()
     }
 
@@ -91,7 +91,7 @@ object LandApi {
 
     suspend fun cancelReservation(reservationId: String): ReservationOut {
         val res = Http.post("/land/reservations/${Http.enc(reservationId)}/cancel")
-        if (!res.ok) throw ApiException("Failed to cancel reservation: ${res.status}", status = res.status)
+        if (!res.ok) throw apiError(res, "Could not cancel the reservation")
         return res.decode()
     }
 }
@@ -157,11 +157,9 @@ object LogisticsApi {
     /** Sends one GPS ping. Never throws: returns false when offline or refused. */
     suspend fun sendLocationPing(
         lat: Double, lng: Double, speed: Double?, heading: Double?, accuracy: Double?, recordedAt: String,
-    ): Boolean = try {
+    ): Boolean = load {
         Http.post("/logistics/location", Http.encode(LocationPingIn(lat, lng, speed, heading, accuracy, recordedAt))).ok
-    } catch (_: Exception) {
-        false
-    }
+    }.getOrDefault(false)
 
     /** Live position of an order's delivery. null while the order is not in a pool yet. */
     suspend fun track(orderId: String): Track? {
@@ -202,7 +200,7 @@ object MediaApi {
         val signed = urlRes.decode<UploadUrlOut>()
 
         val target = if (signed.uploadUrl.startsWith("http")) signed.uploadUrl
-        else URL(URL(ApiConfig.baseUrl), signed.uploadUrl).toString()
+        else URL(URL(Http.baseUrlProvider()), signed.uploadUrl).toString()
         val put = Http.call(
             "PUT", target,
             headers = mapOf("Content-Type" to type) + signed.headers,

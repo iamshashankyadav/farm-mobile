@@ -54,6 +54,13 @@ baseline. Add one per row after a run on a Pixel 6 / API 34 emulator against the
 The customer order-side issues (#39, #40, #42, #43, #44) are in review as PRs #53 to #57. The
 fake paths above are removed in #36; sign-in and token refresh are #37.
 
+## After #36
+
+Every "Fake" row above now loads from the server only. With the server off, each screen that
+loads data shows the error state (the server's message or "Cannot reach the server at <URL>",
+Retry, Change server); a refused reservation shows the server's reason and creates nothing.
+The login screen keeps password and OTP sign-in, sign-up and the server address.
+
 ## Server address
 
 See `README.md`, section "API server": a Gradle property at build time, or the login screen at run

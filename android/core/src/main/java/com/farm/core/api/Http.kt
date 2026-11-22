@@ -93,7 +93,17 @@ object Http {
     @Volatile
     var authToken: String? = null
 
-    fun url(path: String): String = ApiConfig.baseUrl + path
+    /**
+     * Where requests go and which token they carry. The app uses the configured gateway and the
+     * signed-in token; tests swap these to point the real API code at a MockWebServer.
+     */
+    @Volatile
+    var baseUrlProvider: () -> String = { ApiConfig.baseUrl }
+
+    @Volatile
+    var tokenProvider: () -> String? = { authToken }
+
+    fun url(path: String): String = baseUrlProvider().trimEnd('/') + path
 
     fun jsonBody(text: String): RequestBody = text.toRequestBody(JSON_TYPE)
 
@@ -108,7 +118,7 @@ object Http {
         path: String,
         body: String? = null,
         headers: Map<String, String> = emptyMap(),
-        token: String? = authToken,
+        token: String? = tokenProvider(),
         absolute: Boolean = false,
         rawBody: RequestBody? = null,
     ): HttpResult = withContext(Dispatchers.IO) {

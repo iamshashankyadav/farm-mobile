@@ -326,13 +326,10 @@ private val SideSlot = 96.dp
 
 @Composable
 fun CenteredLoading(text: String? = null) {
-    Column(
-        Modifier.fillMaxSize().background(FarmColors.Background),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        CircularProgressIndicator(color = FarmColors.Primary)
-        if (text != null) FText(text, variant = TextVariant.Caption, modifier = Modifier.padding(top = 10.dp))
+    // A skeleton of the screen to come rather than a spinner over a blank page.
+    Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
+        if (text != null) FText(text, variant = TextVariant.Caption, modifier = Modifier.padding(start = 16.dp, top = 16.dp))
+        LoadingSkeleton(rows = 3)
     }
 }
 
