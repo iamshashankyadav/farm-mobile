@@ -1,10 +1,14 @@
 package com.farm.customer.orders
 
+import com.farm.core.api.ApiConfig
+import com.farm.core.api.ApiException
 import com.farm.core.api.DeliveryAddress
+import com.farm.core.api.NetworkException
 import com.farm.core.api.OrderEvent
 import com.farm.core.api.OrderSummary
 import com.farm.core.api.PaymentRecord
 import com.farm.core.api.Track
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.text.NumberFormat
@@ -41,15 +45,95 @@ val STATUS_META = mapOf(
 
 fun statusMeta(status: String) = STATUS_META[status] ?: StatusMeta(status.replace('_', ' '), "#475569", "#f1f5f9", "📍")
 
-/** The steps a customer sees. Statuses in between (QC_PASSED, POOLED, COMPLETED) map onto one. */
-val TIMELINE_STEPS = listOf("PLACED", "CONFIRMED", "PACKED", "READY_FOR_DISPATCH", "IN_TRANSIT", "DELIVERED")
+// ─── Loading ────────────────────────────────────────────────────────────────
 
-private val STEP_OF = mapOf(
-    "PLACED" to 0, "CONFIRMED" to 1, "PACKED" to 2, "QC_PASSED" to 2, "READY_FOR_DISPATCH" to 3, "POOLED" to 3,
-    "IN_TRANSIT" to 4, "DELIVERED" to 5, "COMPLETED" to 5, "CANCELLED" to -1,
+/**
+ * Runs one API load and keeps the failures a screen can show: no connection, an HTTP error, or a
+ * reply the app cannot read. Anything else (and coroutine cancellation, so leaving a screen stops
+ * its polling) is not caught here.
+ */
+inline fun <T> load(block: () -> T): Result<T> = try {
+    Result.success(block())
+} catch (e: NetworkException) {
+    Result.failure(e)
+} catch (e: ApiException) {
+    Result.failure(e)
+} catch (e: SerializationException) {
+    Result.failure(e)
+}
+
+/** What to tell the customer when [load] failed. */
+fun loadErrorMessage(e: Throwable?, baseUrl: String = ApiConfig.baseUrl): String = when (e) {
+    is NetworkException -> "Cannot reach the server at $baseUrl. Check your connection and try again."
+    is SerializationException -> "The server sent a reply the app could not read."
+    else -> e?.message ?: "Something went wrong. Try again."
+}
+
+// ─── Status rail (same eight stages as the website's StatusRail) ────────────────
+
+/** One stage of the rail: the status that reaches it, its label and who acts at that step. */
+data class RailStage(val status: String, val label: String, val actor: String)
+
+/** The eight stages; COMPLETED shares the last one with DELIVERED. */
+val RAIL_STAGES = listOf(
+    RailStage("PLACED", "Placed", "You"),
+    RailStage("CONFIRMED", "Confirmed", "Payment"),
+    RailStage("PACKED", "Packed", "Farmer"),
+    RailStage("QC_PASSED", "Graded", "Quality check"),
+    RailStage("READY_FOR_DISPATCH", "Ready for dispatch", "System"),
+    RailStage("POOLED", "Pooled", "System"),
+    RailStage("IN_TRANSIT", "In transit", "Delivery partner"),
+    RailStage("DELIVERED", "Delivered", "Delivery partner"),
 )
 
-fun stepIndex(status: String): Int = STEP_OF[status] ?: 0
+private val STAGE_OF = mapOf(
+    "PLACED" to 1, "CONFIRMED" to 2, "PACKED" to 3, "QC_PASSED" to 4, "READY_FOR_DISPATCH" to 5,
+    "POOLED" to 6, "IN_TRANSIT" to 7, "DELIVERED" to 8, "COMPLETED" to 8,
+)
+
+/** How many of the eight stages are done: 0 for a cancelled (or unknown) status. */
+fun railStage(status: String): Int = STAGE_OF[status] ?: 0
+
+/** The line under the rail: where the order is now, in the customer's words. */
+fun stageText(status: String): String = when (status) {
+    "PLACED" -> "Placed, waiting for payment"
+    "CONFIRMED" -> "Confirmed, waiting for the farmer to pack it"
+    "PACKED" -> "Packed, waiting for the quality check"
+    "QC_PASSED" -> "Graded, getting ready for dispatch"
+    "READY_FOR_DISPATCH" -> "Ready for dispatch, waiting for a delivery route"
+    "POOLED" -> "On a delivery route, waiting for pickup"
+    "IN_TRANSIT" -> "On its way to you"
+    "DELIVERED" -> "Delivered"
+    "COMPLETED" -> "Delivered and completed"
+    "CANCELLED" -> "Cancelled"
+    else -> status.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+}
+
+/**
+ * When each rail stage was reached: the first event with that status. A finished order's
+ * COMPLETED event fills Delivered when no DELIVERED event was recorded.
+ */
+fun stageTimes(events: List<OrderEvent>): List<String?> {
+    val first = mutableMapOf<String, String>()
+    events.sortedBy { parseInstant(it.occurredAt) ?: Instant.EPOCH }.forEach { e -> first.putIfAbsent(e.status, e.occurredAt) }
+    return RAIL_STAGES.map { stage ->
+        first[stage.status] ?: if (stage.status == "DELIVERED") first["COMPLETED"] else null
+    }
+}
+
+/** The order service lets the customer cancel until the quality check has passed (not after dispatch). */
+private val CANCELLABLE = setOf("PLACED", "CONFIRMED", "PACKED", "QC_PASSED")
+
+fun canCancel(status: String): Boolean = status in CANCELLABLE
+
+/** Message for a refused POST /order/orders/{id}/cancel. */
+fun cancelErrorMessage(status: Int, code: String?, serverMessage: String?): String = when {
+    code == "INVALID_STATUS_TRANSITION" || code == "ORDER_CHANGED" ->
+        "This order can no longer be cancelled: it has moved on. Pull down to refresh."
+    status == 403 -> "You cannot cancel this order."
+    status == 404 -> "Order not found."
+    else -> serverMessage ?: "Could not cancel the order. Try again."
+}
 
 fun isActive(status: String) = status !in listOf("DELIVERED", "COMPLETED", "CANCELLED")
 
@@ -75,16 +159,6 @@ fun rupees(amount: Double): String {
 
 fun addressLabel(a: DeliveryAddress?): String? =
     a?.let { listOfNotNull(it.line1, it.line2, it.city, it.pincode).filter(String::isNotEmpty).joinToString(", ") }
-
-/** When the order reached each timeline step (the first event that maps onto it). */
-fun stepTimes(events: List<OrderEvent>): List<String?> {
-    val times = MutableList<String?>(TIMELINE_STEPS.size) { null }
-    events.sortedBy { it.occurredAt }.forEach { e ->
-        val i = stepIndex(e.status)
-        if (i >= 0 && times[i] == null) times[i] = e.occurredAt
-    }
-    return times
-}
 
 /** Notifications about an order carry its id in the payload; tapping one opens that order. */
 fun notificationOrderId(payload: JsonObject?): String? =
