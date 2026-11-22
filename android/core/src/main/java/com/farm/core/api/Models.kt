@@ -158,6 +158,27 @@ data class PlotOut(
     val seasons: List<SeasonOut> = emptyList(),
 )
 
+/** One plot-season of GET /land/plots/search (the server sends one feature per open season). */
+@Serializable
+data class PlotSeasonProperties(
+    val title: String = "",
+    val areaAcres: Double = 0.0,
+    val farmerId: String = "",
+    val plotSeasonId: String,
+    val season: String = "",
+    val startDate: String = "",
+    val endDate: String = "",
+    val price: Double = 0.0,
+    val allowedCrops: List<String> = emptyList(),
+)
+
+/** A search hit: [id] is the plot id, [geometry] its boundary polygon ([lng, lat] rings). */
+@Serializable
+data class PlotSeasonFeature(val id: String, val geometry: PolygonGeometry? = null, val properties: PlotSeasonProperties)
+
+@Serializable
+data class PlotSearchResult(val features: List<PlotSeasonFeature> = emptyList())
+
 @Serializable
 data class ReservationCreate(val plotSeasonId: String, val cropId: String, val expectedQtyKg: Double)
 

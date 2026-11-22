@@ -66,6 +66,18 @@ class HomeViewModel : ViewModel() {
     var reservationsError by mutableStateOf<Throwable?>(null)
         private set
     var reservingPlot by mutableStateOf<PlotItem?>(null)
+    /** The season picked on the plot detail, preselected in the reservation sheet. */
+    var reservingSeasonId by mutableStateOf<String?>(null)
+    var detailPlot by mutableStateOf<PlotItem?>(null)
+    var landNextOffset by mutableStateOf<Int?>(null)
+        private set
+    var loadingMorePlots by mutableStateOf(false)
+        private set
+    var landMoreError by mutableStateOf<Throwable?>(null)
+        private set
+    /** True when the list shows "search this area" results rather than the radius search. */
+    var searchedArea by mutableStateOf(false)
+        private set
 
     val plots: List<PlotItem> get() = sortPlots(filterPlots(allPlots, landFilters), landFilters.sort)
 
@@ -121,8 +133,9 @@ class HomeViewModel : ViewModel() {
         }
     }
 
+    /** Radius, season and crop are searched on the server; the text query filters on the device. */
     fun updateLandFilters(next: LandFilterState) {
-        val refetch = next.radiusKm != landFilters.radiusKm
+        val refetch = next.radiusKm != landFilters.radiusKm || next.season != landFilters.season || next.crop != landFilters.crop
         landFilters = next
         if (refetch) refreshLand()
     }
@@ -132,11 +145,44 @@ class HomeViewModel : ViewModel() {
         landJob = viewModelScope.launch {
             landLoading = true
             landError = null
-            val plots = async { load { LandRepository.fetchPlots(location.latitude, location.longitude, landFilters.radiusKm) } }
+            landMoreError = null
+            val f = landFilters
+            val plots = async { load { LandRepository.searchPlots(location.latitude, location.longitude, f.radiusKm, f.season, f.crop) } }
             val mine = async { load { LandRepository.fetchReservations() } }
-            plots.await().onSuccess { allPlots = it }.onFailure { allPlots = emptyList(); landError = it }
+            plots.await()
+                .onSuccess { allPlots = it.plots; landNextOffset = it.nextOffset; searchedArea = false }
+                .onFailure { allPlots = emptyList(); landNextOffset = null; landError = it }
             mine.await().onSuccess { reservations = it; reservationsError = null }
                 .onFailure { reservations = emptyList(); reservationsError = it }
+            landLoading = false
+        }
+    }
+
+    /** The next page of plot-seasons around the chosen place. */
+    fun loadMorePlots() {
+        val offset = landNextOffset ?: return
+        if (loadingMorePlots) return
+        loadingMorePlots = true
+        landMoreError = null
+        viewModelScope.launch {
+            val f = landFilters
+            load { LandRepository.searchPlots(location.latitude, location.longitude, f.radiusKm, f.season, f.crop, offset, allPlots) }
+                .onSuccess { allPlots = it.plots; landNextOffset = it.nextOffset }
+                .onFailure { landMoreError = it }
+            loadingMorePlots = false
+        }
+    }
+
+    /** Plots inside the part of the map on screen (west, south, east, north). */
+    fun searchMapArea(bbox: List<Double>) {
+        landJob?.cancel()
+        landJob = viewModelScope.launch {
+            landLoading = true
+            landError = null
+            val f = landFilters
+            load { LandRepository.searchArea(bbox, f.season, f.crop, location.latitude, location.longitude) }
+                .onSuccess { allPlots = it.plots; landNextOffset = null; searchedArea = true }
+                .onFailure { landError = it }
             landLoading = false
         }
     }

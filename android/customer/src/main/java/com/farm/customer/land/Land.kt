@@ -1,10 +1,14 @@
 package com.farm.customer.land
 
 import com.farm.core.api.LandApi
+import com.farm.core.api.PlotOut
+import com.farm.core.api.PlotSeasonFeature
 import com.farm.core.api.ReservationCreate
 import com.farm.core.api.ReservationOut
 import com.farm.customer.browse.haversineM
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlin.math.roundToLong
 
 @Serializable
@@ -122,19 +126,103 @@ fun ReservationOut.toItem(plot: PlotItem? = null, season: PlotSeasonItem? = null
     deposit = deposit ?: 0.0, total = total ?: 0.0, createdAt = createdAt ?: "", expiresAt = expiresAt,
 )
 
+/** Season names the land service uses (plot-seasons are "Kharif", "Rabi" or "Zaid"). */
+val SEASON_NAMES = listOf("Kharif", "Rabi", "Zaid")
+
+/** Plot-seasons asked for per search page (the server's maximum). */
+const val PLOT_PAGE_SIZE = 100
+
+/** The search radius the server accepts (1 to 200 km). */
+fun clampPlotRadius(km: Int): Int = km.coerceIn(1, 200)
+
+private val IST: ZoneId = ZoneId.of("Asia/Kolkata")
+
+/** A season can be reserved up to and including its last day, India time (the server's rule). */
+fun seasonEnded(endDate: String, today: LocalDate = LocalDate.now(IST)): Boolean =
+    runCatching { LocalDate.parse(endDate.take(10)).isBefore(today) }.getOrDefault(false)
+
+/** The middle of a plot's outer ring, as [lng, lat]; null without a usable polygon. */
+fun polygonCentroid(rings: List<List<List<Double>>>): List<Double>? {
+    val ring = rings.firstOrNull()?.filter { it.size >= 2 } ?: return null
+    val points = if (ring.size > 1 && ring.first() == ring.last()) ring.dropLast(1) else ring
+    if (points.isEmpty()) return null
+    return listOf(points.sumOf { it[0] } / points.size, points.sumOf { it[1] } / points.size)
+}
+
+/**
+ * Turns search hits (one per plot-season) into plots with their open seasons, keeping the
+ * server's order, and adds them to [existing] when paging. Ended seasons are left out, and a plot
+ * with no open season is not shown.
+ */
+fun mergePlotFeatures(
+    existing: List<PlotItem>,
+    features: List<PlotSeasonFeature>,
+    lat: Double,
+    lng: Double,
+    today: LocalDate = LocalDate.now(IST),
+): List<PlotItem> {
+    val plots = LinkedHashMap<String, PlotItem>()
+    existing.forEach { plots[it.id] = it }
+    for (f in features) {
+        val p = f.properties
+        val season = PlotSeasonItem(p.plotSeasonId, f.id, p.season, p.startDate, p.endDate, p.price, p.allowedCrops)
+        val known = plots[f.id]
+        if (known != null) {
+            if (known.seasons.none { it.id == season.id }) plots[f.id] = known.copy(seasons = known.seasons + season)
+            continue
+        }
+        val rings = f.geometry?.coordinates ?: emptyList()
+        val centre = polygonCentroid(rings)
+        plots[f.id] = PlotItem(
+            id = f.id, farmerId = p.farmerId, title = p.title, areaAcres = p.areaAcres,
+            distanceM = centre?.let { haversineM(lat, lng, it[1], it[0]) } ?: 0.0,
+            centroid = centre ?: listOf(lng, lat), boundary = rings, seasons = listOf(season),
+        )
+    }
+    return plots.values
+        .map { plot -> plot.copy(seasons = plot.seasons.filterNot { seasonEnded(it.endDate, today) }) }
+        .filter { it.seasons.isNotEmpty() }
+}
+
+/** Message for a refused POST /land/reservations. */
+fun reserveErrorMessage(code: String?, serverMessage: String?): String = when (code) {
+    "SEASON_ENDED" -> "This season has already ended. Pick another season."
+    "CROP_NOT_ALLOWED" -> "That crop is not allowed in this season. Pick one of the listed crops."
+    "PLOT_SEASON_ALREADY_RESERVED" -> "Someone has just reserved this season. Pick another season or plot."
+    "PLOT_SEASON_NOT_FOUND", "PLOT_NOT_FOUND" -> "This plot is no longer available."
+    else -> serverMessage ?: "Could not reserve the plot. Try again."
+}
+
+/** One page of plots, and where the next page starts (null when this was the last one). */
+data class PlotPage(val plots: List<PlotItem>, val nextOffset: Int?)
+
 /** The land service only. A failed call throws; nothing is invented. */
 object LandRepository {
-    suspend fun fetchPlots(lat: Double, lng: Double, radiusKm: Int): List<PlotItem> =
-        LandApi.searchPlots(lat, lng, radiusKm).map { p ->
-            val c = p.centroid?.coordinates?.takeIf { it.size >= 2 }
-            PlotItem(
-                id = p.id, farmerId = p.farmerId, title = p.title, description = p.description, areaAcres = p.areaAcres,
-                soilType = p.soilType, waterSource = p.waterSource, status = p.status ?: "ACTIVE",
-                distanceM = c?.let { haversineM(lat, lng, it[1], it[0]) } ?: 0.0,
-                centroid = c ?: listOf(lng, lat), boundary = p.boundary?.coordinates ?: emptyList(),
-                seasons = p.seasons.map { s -> PlotSeasonItem(s.id, s.plotId, s.season, s.startDate, s.endDate, s.price, s.allowedCrops) },
-            )
-        }
+    /** Open plot-seasons around a point, grouped into plots; pass [existing] and [offset] for more. */
+    suspend fun searchPlots(
+        lat: Double,
+        lng: Double,
+        radiusKm: Int,
+        season: String?,
+        crop: String?,
+        offset: Int = 0,
+        existing: List<PlotItem> = emptyList(),
+    ): PlotPage {
+        val res = LandApi.searchPlots(lat, lng, clampPlotRadius(radiusKm), season, crop, PLOT_PAGE_SIZE, offset)
+        return PlotPage(
+            mergePlotFeatures(existing, res.features, lat, lng),
+            if (res.features.size == PLOT_PAGE_SIZE) offset + PLOT_PAGE_SIZE else null,
+        )
+    }
+
+    /** Open plot-seasons inside the visible map box [bbox] = west, south, east, north. */
+    suspend fun searchArea(bbox: List<Double>, season: String?, crop: String?, fromLat: Double, fromLng: Double): PlotPage {
+        val res = LandApi.searchPlots(null, null, null, season, crop, PLOT_PAGE_SIZE, 0, bbox)
+        return PlotPage(mergePlotFeatures(emptyList(), res.features, fromLat, fromLng), null)
+    }
+
+    /** Description, soil and water of one plot (the search does not carry them). */
+    suspend fun plotDetail(plotId: String): PlotOut = LandApi.getPlot(plotId)
 
     suspend fun fetchReservations(): List<ReservationItem> = LandApi.getMyReservations().map { it.toItem() }
 

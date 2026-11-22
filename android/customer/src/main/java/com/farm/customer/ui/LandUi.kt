@@ -29,7 +29,9 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,13 +62,21 @@ import com.farm.customer.browse.ProducePhoto
 import com.farm.customer.browse.formatDistance
 import com.farm.customer.checkout.formatRupees
 import com.farm.customer.land.PlotItem
+import com.farm.customer.reservation.RESERVATION_STAGES
+import com.farm.customer.reservation.isClosed
 import com.farm.customer.reservation.nextStepText
+import com.farm.customer.reservation.reservationStage
+import com.farm.customer.land.LandRepository
+import com.farm.customer.land.cropTitle
+import com.farm.customer.land.reserveErrorMessage
+import com.farm.customer.land.seasonEnded
+import com.farm.core.api.ApiException
+import com.farm.core.api.PlotOut
 import com.farm.core.api.load
 import com.farm.core.api.loadErrorMessage
 import com.farm.customer.land.PlotSeasonItem
 import com.farm.customer.land.ReservationItem
 import com.farm.customer.land.reservationEstimate
-import com.farm.customer.orders.LatLng
 import kotlinx.coroutines.launch
 
 private fun cap(s: String) = s.replaceFirstChar { it.uppercase() }
@@ -127,17 +137,18 @@ fun PlotCard(plot: PlotItem, onReserve: (PlotItem) -> Unit) {
 }
 
 @Composable
-fun PlotMapView(plots: List<PlotItem>, location: LocationCoords, onReserve: (PlotItem) -> Unit) {
+fun PlotMapView(
+    plots: List<PlotItem>,
+    location: LocationCoords,
+    onOpen: (PlotItem) -> Unit,
+    onSearchArea: (List<Double>) -> Unit,
+) {
     var selectedId by remember { mutableStateOf(plots.firstOrNull()?.id) }
     val selected = plots.find { it.id == selectedId } ?: plots.firstOrNull()
     Column(Modifier.fillMaxSize()) {
-        PinCanvas(
-            center = location, items = plots,
-            coord = { LatLng(it.centroid.getOrElse(1) { 0.0 }, it.centroid.getOrElse(0) { 0.0 }) },
-            key = { it.id }, selectedKey = selected?.id, onSelect = { selectedId = it.id },
-            pin = { p, sel -> PinBubble("🌾", "${qtyText(p.areaAcres)} ac", sel, Color(0xFF0F766E)) },
-            banner = "🗺 Showing ${plots.size} farm plots near ${location.name}",
-            modifier = Modifier.weight(1f),
+        PlotTileMap(
+            plots, location.latitude, location.longitude, selected?.id,
+            onSelect = { selectedId = it.id }, onSearchArea = onSearchArea, modifier = Modifier.weight(1f),
         )
         if (selected != null) {
             FarmCard(Modifier.fillMaxWidth().padding(12.dp)) {
@@ -148,9 +159,6 @@ fun PlotMapView(plots: List<PlotItem>, location: LocationCoords, onReserve: (Plo
                     }
                     Pill("${qtyText(selected.areaAcres)} Acres", Color(0xFFF0FDFA), Color(0xFF0F766E))
                 }
-                listOfNotNull(selected.soilType?.let { "🌱 $it" }, selected.waterSource?.let { "💧 $it" }).takeIf { it.isNotEmpty() }?.let {
-                    FText(it.joinToString("    "), fontSize = 12.sp, color = FarmColors.TextLabel, modifier = Modifier.padding(top = 6.dp))
-                }
                 FText(
                     "Seasons: " + selected.seasons.joinToString(" · ") { "${it.season} (${formatRupees(it.pricePerKg)}/kg)" },
                     fontSize = 11.sp, color = FarmColors.TextMuted, modifier = Modifier.padding(top = 4.dp),
@@ -160,20 +168,82 @@ fun PlotMapView(plots: List<PlotItem>, location: LocationCoords, onReserve: (Plo
                         FText("Starting from", variant = TextVariant.Caption)
                         FText("${formatRupees(selected.minPrice ?: 0.0)}/kg", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F766E))
                     }
-                    FarmButton("Reserve This Plot →", { onReserve(selected) })
+                    FarmButton("View plot →", { onOpen(selected) })
                 }
             }
         }
     }
 }
 
+/**
+ * One plot: what the search returned (area, open seasons with price and crops) plus its
+ * description, soil and water from GET /land/plots/{id}. Rows the API does not return are hidden.
+ */
+@Composable
+fun PlotDetailView(plot: PlotItem, onReserve: (PlotSeasonItem) -> Unit, onClose: () -> Unit) {
+    var detail by remember(plot.id) { mutableStateOf<PlotOut?>(null) }
+    var detailError by remember(plot.id) { mutableStateOf<Throwable?>(null) }
+    var reload by remember(plot.id) { mutableIntStateOf(0) }
+    LaunchedEffect(plot.id, reload) {
+        load { LandRepository.plotDetail(plot.id) }.onSuccess { detail = it; detailError = null }.onFailure { detailError = it }
+    }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        FarmCard(Modifier.fillMaxWidth()) {
+            FText(plot.title, variant = TextVariant.H1, fontSize = 24.sp)
+            FText(placeLine(plot), variant = TextVariant.Caption)
+            FText("${qtyText(plot.areaAcres)} acres", variant = TextVariant.Label, modifier = Modifier.padding(top = 6.dp))
+            val d = detail
+            when {
+                d != null -> {
+                    listOfNotNull(d.soilType?.let { "🌱 Soil: $it" }, d.waterSource?.let { "💧 Water: $it" }).forEach {
+                        FText(it, variant = TextVariant.Caption, color = FarmColors.TextBody)
+                    }
+                    d.description?.takeIf { it.isNotBlank() }?.let { FText(it, modifier = Modifier.padding(top = 6.dp)) }
+                }
+                detailError != null -> {
+                    FText("Could not load the plot's description: ${loadErrorMessage(detailError)}", variant = TextVariant.Caption)
+                    FarmButton("Retry", { reload++ }, Modifier.padding(top = 6.dp), variant = ButtonVariant.Secondary)
+                }
+                else -> FText("Loading the plot's details…", variant = TextVariant.Caption)
+            }
+        }
+        FText("Open seasons", variant = TextVariant.H2, fontSize = 18.sp)
+        plot.seasons.forEach { s ->
+            FarmCard(Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        FText(s.season, variant = TextVariant.Label)
+                        FText("${formatDay(s.startDate)} to ${formatDay(s.endDate)}", variant = TextVariant.Caption)
+                    }
+                    FText("${formatRupees(s.pricePerKg)}/kg", fontWeight = FontWeight.Bold, color = FarmColors.Primary)
+                }
+                if (s.allowedCrops.isNotEmpty()) {
+                    FText("Crops: " + s.allowedCrops.joinToString(", ") { cropTitle(it) }, variant = TextVariant.Caption, modifier = Modifier.padding(top = 4.dp))
+                }
+                FarmButton("Reserve ${s.season}", { onReserve(s) }, Modifier.fillMaxWidth().padding(top = 8.dp))
+            }
+        }
+        FarmButton("← Back to plots", onClose, Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary)
+    }
+}
+
+private fun formatDay(iso: String): String =
+    runCatching { java.time.LocalDate.parse(iso.take(10)).format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy")) }.getOrDefault(iso)
+
 /** Reserve farmland: season, crop and expected harvest, with the 20% deposit estimate. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun ReservationSheet(plot: PlotItem, onConfirm: suspend (PlotSeasonItem, String, Double) -> Unit, onClose: () -> Unit) {
+fun ReservationSheet(
+    plot: PlotItem,
+    onConfirm: suspend (PlotSeasonItem, String, Double) -> Unit,
+    onClose: () -> Unit,
+    initialSeasonId: String? = null,
+) {
     val scope = rememberCoroutineScope()
-    var season by remember(plot.id) { mutableStateOf(plot.seasons.firstOrNull()) }
-    var crop by remember(plot.id) { mutableStateOf(plot.seasons.firstOrNull()?.allowedCrops?.firstOrNull() ?: "tomato") }
+    // ended seasons are never offered (the server would answer SEASON_ENDED)
+    val openSeasons = remember(plot.id) { plot.seasons.filterNot { seasonEnded(it.endDate) } }
+    var season by remember(plot.id) { mutableStateOf(openSeasons.find { it.id == initialSeasonId } ?: openSeasons.firstOrNull()) }
+    var crop by remember(plot.id) { mutableStateOf(season?.allowedCrops?.firstOrNull() ?: "") }
     var qtyText by remember { mutableStateOf("100") }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -186,7 +256,8 @@ fun ReservationSheet(plot: PlotItem, onConfirm: suspend (PlotSeasonItem, String,
             FText("${plot.title} (${qtyText(plot.areaAcres)} Acres)", variant = TextVariant.Caption)
 
             FText("1. Select Agricultural Season", variant = TextVariant.Label, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
-            plot.seasons.forEach { s ->
+            if (openSeasons.isEmpty()) FText("No season of this plot is open for reservations.", variant = TextVariant.Caption)
+            openSeasons.forEach { s ->
                 val sel = season?.id == s.id
                 Row(
                     Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(10.dp))
@@ -217,7 +288,7 @@ fun ReservationSheet(plot: PlotItem, onConfirm: suspend (PlotSeasonItem, String,
             FarmCard(Modifier.fillMaxWidth().padding(top = 10.dp), background = Color(0xFFF8FAF8), border = BorderStroke(1.dp, Color(0xFFDCFCE7))) {
                 FText("Reservation Agreement Summary", variant = TextVariant.Label, modifier = Modifier.padding(bottom = 8.dp))
                 SummaryRow("Plot Season", season?.season ?: "-")
-                SummaryRow("Selected Crop", crop.uppercase())
+                SummaryRow("Selected Crop", if (crop.isEmpty()) "-" else cropTitle(crop))
                 SummaryRow("Rate per kg", "${formatRupees(season?.pricePerKg ?: 0.0)}/kg")
                 HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color(0xFFE5E7EB))
                 Row(Modifier.fillMaxWidth()) {
@@ -251,11 +322,11 @@ fun ReservationSheet(plot: PlotItem, onConfirm: suspend (PlotSeasonItem, String,
                             // a refused reservation shows the server's reason and creates nothing
                             load { onConfirm(s, crop, qty) }
                                 .onSuccess { onClose() }
-                                .onFailure { error = loadErrorMessage(it) }
+                                .onFailure { e -> error = (e as? ApiException)?.let { reserveErrorMessage(it.code, it.message) } ?: loadErrorMessage(e) }
                             submitting = false
                         }
                     },
-                    Modifier.weight(1f), enabled = !submitting && qty > 0 && season != null,
+                    Modifier.weight(1f), enabled = !submitting && qty > 0 && season != null && crop.isNotEmpty(),
                 )
             }
         }
@@ -306,7 +377,11 @@ fun MyReservationsList(reservations: List<ReservationItem>, onSelect: (Reservati
                     }
                     reservationStatusPill(res.status)
                 }
-                FText(nextStepText(res.status, res.expiresAt), variant = TextVariant.Caption, color = FarmColors.TextBody, modifier = Modifier.padding(top = 8.dp))
+                if (isClosed(res.status)) {
+                    FText(nextStepText(res.status, res.expiresAt), variant = TextVariant.Caption, color = FarmColors.TextBody, modifier = Modifier.padding(top = 8.dp))
+                } else {
+                    StatusRail(reservationStage(res.status), nextStepText(res.status, res.expiresAt), Modifier.padding(top = 10.dp), total = RESERVATION_STAGES.size)
+                }
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) { FText("Target Harvest", variant = TextVariant.Caption); FText("${qtyText(res.expectedQtyKg)} kg", variant = TextVariant.Label) }
                     if (res.deposit > 0) Column(Modifier.weight(1f)) { FText("Deposit", variant = TextVariant.Caption); FText(formatRupees(res.deposit), variant = TextVariant.Label) }
