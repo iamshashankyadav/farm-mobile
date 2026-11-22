@@ -92,3 +92,11 @@ what we expected. The backend owner fixes them; the apps do not work around them
    Expected: no `otp` for the partner; the code is what the customer tells the partner at the door,
    so the partner must not be able to read it. The delivery app no longer shows or checks it; the
    server's `deliver` call is the only check (#45).
+
+3. **Push is sent through Expo only.**
+   `services/notification` posts every push to the Expo push API
+   (`https://exp.host/--/api/v2/push/send`). The native app registers an FCM token
+   (`POST /notification/notifications/devices`, platform `android`); Expo cannot deliver to a
+   raw FCM token, so no push reaches the phone.
+   Expected: send `android` tokens through FCM (HTTP v1 API with the team's service account), or
+   accept both and pick the sender by token shape (#50).

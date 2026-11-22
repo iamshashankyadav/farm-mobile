@@ -1,5 +1,31 @@
 package com.farm.customer
 
+import com.farm.customer.notifications.startPush
+
+import com.farm.customer.notifications.routeFor
+
+import com.farm.customer.notifications.pushTarget
+
+import com.farm.customer.notifications.pushAvailable
+
+import com.farm.customer.notifications.EXTRA_RESERVATION_ID
+
+import com.farm.customer.notifications.EXTRA_ORDER_ID
+
+import androidx.compose.runtime.mutableStateOf
+
+import androidx.compose.runtime.MutableState
+
+import androidx.compose.runtime.LaunchedEffect
+
+import android.os.Build
+
+import android.content.pm.PackageManager
+
+import android.content.Intent
+
+import android.Manifest
+
 import com.farm.customer.prefs.LocalLists
 
 import android.app.Application
@@ -36,6 +62,7 @@ class FarmCustomerApp : Application() {
         super.onCreate()
         FarmCore.init(this)
         LocalLists.init(this)
+        startPush(this)
         // Signing out (or a session the server no longer accepts) clears what the app keeps locally.
         AuthManager.onSignOut {
             CartStore.clear()
@@ -49,15 +76,42 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { FarmTheme { CustomerNav() } }
+        deepLink.value = deepLinkOf(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && pushAvailable(this) &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
+        setContent { FarmTheme { CustomerNav(deepLink) } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        deepLink.value = deepLinkOf(intent)
+    }
+
+    /** The screen a tapped push notification asks for (an order or a reservation), consumed once. */
+    private val deepLink = mutableStateOf<String?>(null)
+
+    private fun deepLinkOf(intent: Intent?): String? {
+        val extras = intent?.extras ?: return null
+        val data = listOf(EXTRA_ORDER_ID, EXTRA_RESERVATION_ID).mapNotNull { k -> extras.getString(k)?.let { k to it } }.toMap()
+        return pushTarget(data)?.let(::routeFor)
     }
 }
 
 private fun NavHostController.home() = popBackStack("home", inclusive = false)
 
 @Composable
-private fun CustomerNav() {
+private fun CustomerNav(deepLink: MutableState<String?>) {
     val nav = rememberNavController()
+    val link = deepLink.value
+    LaunchedEffect(link) {
+        if (link != null) {
+            nav.navigate(link)
+            deepLink.value = null
+        }
+    }
     NavHost(nav, startDestination = "home") {
         composable("home") {
             HomeScreen(

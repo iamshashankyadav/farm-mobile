@@ -4,6 +4,17 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// ─── Release build (#50) ─────────────────────────────────────────────────────
+// versionCode = number of commits, so every build from a newer commit installs over an older one.
+val gitCommitCount: Int = providers.exec { commandLine("git", "rev-list", "--count", "HEAD"); isIgnoreExitValue = true }
+    .standardOutput.asText.get().trim().toIntOrNull() ?: 1
+val gitDescribe: String = providers.exec { commandLine("git", "describe", "--tags", "--always", "--dirty"); isIgnoreExitValue = true }
+    .standardOutput.asText.get().trim().ifEmpty { "dev" }
+
+// Release signing from environment variables (never commit a keystore). Without them the release
+// APK is signed with the debug key, so `assembleRelease` still gives an APK that installs.
+val releaseKeystore: String? = System.getenv("FARM_KEYSTORE_PATH")?.takeIf { file(it).exists() }
+
 android {
     namespace = "com.farm.delivery"
     compileSdk = 35
@@ -12,15 +23,27 @@ android {
         applicationId = "com.farm.delivery"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = gitCommitCount
+        versionName = "1.0.0 ($gitDescribe)"
+    }
+
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("FARM_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("FARM_KEY_ALIAS")
+                keyPassword = System.getenv("FARM_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            // Signed with the debug key so `assembleRelease` gives an installable APK out of the box.
-            signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     compileOptions {
