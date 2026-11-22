@@ -29,10 +29,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,18 +53,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.farm.core.api.ApiException
 import com.farm.core.api.AppNotification
 import com.farm.core.api.HarvestOrderChoice
 import com.farm.core.api.NetworkException
 import com.farm.core.api.NotificationApi
 import com.farm.core.api.OrderApi
 import com.farm.core.api.OrderDetail
-import com.farm.core.api.OrderRating
 import com.farm.core.api.OrderRatingCreate
 import com.farm.core.api.OrderSummary
 import com.farm.core.api.LogisticsApi
@@ -86,9 +90,10 @@ import com.farm.customer.checkout.validateAddress
 import com.farm.customer.orders.HarvestStage
 import com.farm.customer.orders.LatLng
 import com.farm.customer.orders.Phase
-import com.farm.customer.orders.TIMELINE_STEPS
 import com.farm.customer.orders.addressLabel
+import com.farm.customer.orders.canCancel
 import com.farm.customer.orders.canRate
+import com.farm.customer.orders.cancelErrorMessage
 import com.farm.customer.orders.deliveryDates
 import com.farm.customer.orders.distanceLabel
 import com.farm.customer.orders.etaLabel
@@ -97,11 +102,14 @@ import com.farm.customer.orders.formatDateTime
 import com.farm.customer.orders.harvestStageOf
 import com.farm.customer.orders.haversineKm
 import com.farm.customer.orders.itemsLabel
+import com.farm.customer.orders.load
+import com.farm.customer.orders.loadErrorMessage
 import com.farm.customer.orders.notificationOrderId
 import com.farm.customer.orders.orderTitle
 import com.farm.customer.orders.parseChoiceError
 import com.farm.customer.orders.phaseOf
 import com.farm.customer.orders.project
+import com.farm.customer.orders.railStage
 import com.farm.customer.orders.rupees
 import com.farm.customer.orders.seenLabel
 import com.farm.customer.orders.shortId
@@ -109,8 +117,8 @@ import com.farm.customer.orders.shouldPoll
 import com.farm.customer.orders.shouldPollHarvest
 import com.farm.customer.orders.splitOrders
 import com.farm.customer.orders.statusMeta
-import com.farm.customer.orders.stepIndex
-import com.farm.customer.orders.stepTimes
+import com.farm.customer.orders.stageText
+import com.farm.customer.orders.stageTimes
 import com.farm.customer.orders.summarise
 import com.farm.customer.orders.timeAgo
 import kotlinx.coroutines.delay
@@ -154,18 +162,33 @@ fun OrdersScreen(onBack: () -> Unit, onHome: () -> Unit, onOrder: (String) -> Un
         var refreshing by remember { mutableStateOf(false) }
         var loadingMore by remember { mutableStateOf(false) }
         var reload by remember { mutableIntStateOf(0) }
+        var failure by remember { mutableStateOf<String?>(null) }
+        var moreError by remember { mutableStateOf<String?>(null) }
+        var loadedMore by remember { mutableStateOf(false) }
 
+        // Load, then refresh the first page every 30 s while the list is open: statuses change on
+        // the server (the farmer packs, logistics pools) and the rail should follow without a restart.
         LaunchedEffect(reload) {
-            try {
-                val page = OrderApi.listOrders(null)
-                orders = page.items
-                cursor = page.nextCursor
-                failed = false
-            } catch (_: Exception) {
-                failed = true
+            if (refreshing) loadedMore = false // pull-to-refresh starts over from the first page
+            while (true) {
+                load { OrderApi.listOrders(null) }
+                    .onSuccess { page ->
+                        if (!loadedMore) {
+                            orders = page.items
+                            cursor = page.nextCursor
+                        } else {
+                            // older pages were loaded with "Load more": refresh the first page, keep the rest
+                            val fresh = page.items.map { it.id }.toSet()
+                            orders = page.items + orders.filter { it.id !in fresh }
+                        }
+                        failed = false
+                        failure = null
+                    }
+                    .onFailure { e -> if (!loaded || orders.isEmpty()) { failed = true; failure = loadErrorMessage(e) } }
+                loaded = true
+                refreshing = false
+                delay(30_000)
             }
-            loaded = true
-            refreshing = false
         }
 
         Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
@@ -179,7 +202,7 @@ fun OrdersScreen(onBack: () -> Unit, onHome: () -> Unit, onOrder: (String) -> Un
                     if (loaded && failed) item {
                         FarmCard(Modifier.fillMaxWidth()) {
                             FText("Could not load your orders", variant = TextVariant.H2, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-                            FText("Check your connection and try again.", variant = TextVariant.Caption, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                            FText(failure ?: "Check your connection and try again.", variant = TextVariant.Caption, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                             FarmButton("Try again", { reload++ }, Modifier.fillMaxWidth().padding(top = 16.dp))
                         }
                     }
@@ -201,17 +224,21 @@ fun OrdersScreen(onBack: () -> Unit, onHome: () -> Unit, onOrder: (String) -> Un
                     if (cursor != null) item {
                         FarmButton(if (loadingMore) "Loading…" else "Load more orders", {
                             loadingMore = true
+                            moreError = null
                             scope.launch {
-                                try {
-                                    val page = OrderApi.listOrders(cursor)
-                                    orders = orders + page.items
-                                    cursor = page.nextCursor
-                                } catch (_: Exception) {
-                                }
+                                load { OrderApi.listOrders(cursor) }
+                                    .onSuccess { page ->
+                                        val known = orders.map { it.id }.toSet()
+                                        orders = orders + page.items.filter { it.id !in known }
+                                        cursor = page.nextCursor
+                                        loadedMore = true
+                                    }
+                                    .onFailure { moreError = loadErrorMessage(it) }
                                 loadingMore = false
                             }
                         }, Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary, enabled = !loadingMore)
                     }
+                    moreError?.let { item { FText(it, variant = TextVariant.Caption, color = Color(0xFFC62828)) } }
                 }
             }
         }
@@ -228,10 +255,14 @@ private fun OrderCard(order: OrderSummary, onClick: () -> Unit) {
             Text(rupees(order.total), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = FarmColors.Primary)
         }
         FText(itemsLabel(order.itemCount), variant = TextVariant.Caption, modifier = Modifier.padding(vertical = 6.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            StatusBadge(order.status)
-            Spacer(Modifier.weight(1f))
-            Text("›", fontSize = 22.sp, color = Color(0xFFBBBBBB))
+        if (order.status == "CANCELLED") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StatusBadge(order.status)
+                Spacer(Modifier.weight(1f))
+                Text("›", fontSize = 22.sp, color = Color(0xFFBBBBBB))
+            }
+        } else {
+            StatusRail(railStage(order.status), stageText(order.status))
         }
     }
 }
@@ -240,19 +271,22 @@ private fun OrderCard(order: OrderSummary, onClick: () -> Unit) {
 
 /** Loads one order; [poll] returns the delay before the next refresh, or null to stop. */
 @Composable
-private fun rememberOrder(orderId: String, refreshKey: Int = 0, poll: ((OrderDetail) -> Long?)? = null): Triple<OrderDetail?, String?, Boolean> {
+private fun rememberOrder(
+    orderId: String,
+    refreshKey: Int = 0,
+    onLoaded: () -> Unit = {},
+    poll: ((OrderDetail) -> Long?)? = null,
+): Triple<OrderDetail?, String?, Boolean> {
     var order by remember { mutableStateOf<OrderDetail?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var loaded by remember { mutableStateOf(false) }
     LaunchedEffect(orderId, refreshKey) {
         while (true) {
-            try {
-                order = OrderApi.getOrder(orderId)
-                error = null
-            } catch (e: Exception) {
-                error = e.message
-            }
+            load { OrderApi.getOrder(orderId) }
+                .onSuccess { order = it; error = null }
+                .onFailure { error = if ((it as? ApiException)?.status == 404) "Order not found" else loadErrorMessage(it) }
             loaded = true
+            onLoaded()
             val next = order?.let { poll?.invoke(it) } ?: break
             delay(next)
         }
@@ -260,61 +294,126 @@ private fun rememberOrder(orderId: String, refreshKey: Int = 0, poll: ((OrderDet
     return Triple(order, error, loaded)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, onTrack: (String) -> Unit) =
     RequireCustomer("Access denied.", onHome) {
+        val scope = rememberCoroutineScope()
         var reload by remember { mutableIntStateOf(0) }
-        val (order, error, loaded) = rememberOrder(orderId, reload)
+        var refreshing by remember { mutableStateOf(false) }
+        var confirmCancel by remember { mutableStateOf(false) }
+        var cancelling by remember { mutableStateOf(false) }
+        var cancelError by remember { mutableStateOf<String?>(null) }
+        // Refresh every 15 s while the order can still change, so packing on the website or a
+        // pickup by the partner shows up without leaving the screen.
+        val (order, error, loaded) = rememberOrder(orderId, reload, onLoaded = { refreshing = false }) {
+            if (it.status == "COMPLETED" || it.status == "CANCELLED") null else 15_000L
+        }
         if (!loaded) return@RequireCustomer CenteredLoading()
+
+        fun cancel() {
+            confirmCancel = false
+            cancelling = true
+            cancelError = null
+            scope.launch {
+                load { OrderApi.cancelOrder(orderId) }
+                    .onSuccess { res ->
+                        if (res.ok) reload++ else {
+                            val body = res.error()
+                            cancelError = cancelErrorMessage(res.status, body?.code, body?.message)
+                            if (body?.code == "INVALID_STATUS_TRANSITION" || body?.code == "ORDER_CHANGED") reload++
+                        }
+                    }
+                    .onFailure { cancelError = loadErrorMessage(it) }
+                cancelling = false
+            }
+        }
+
+        if (confirmCancel) {
+            AlertDialog(
+                onDismissRequest = { confirmCancel = false },
+                title = { Text("Cancel this order?") },
+                text = { Text("The farmer will not pack it and your payment is refunded.") },
+                confirmButton = { TextButton(::cancel) { Text("Cancel order", color = Color(0xFFC2412D)) } },
+                dismissButton = { TextButton({ confirmCancel = false }) { Text("Keep it") } },
+            )
+        }
+
         Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
             ScreenHeader("Order Detail", onBack)
             if (order == null) {
                 val notFound = error == "Order not found"
                 Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     FText(if (notFound) "Order not found" else "Could not load the order", variant = TextVariant.H2)
-                    if (!notFound) FarmButton("Try again", { reload++ }, Modifier.padding(top = 16.dp))
+                    if (!notFound) {
+                        error?.let { FText(it, variant = TextVariant.Caption, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp)) }
+                        FarmButton("Try again", { reload++ }, Modifier.padding(top = 16.dp))
+                    }
                     FarmButton("Back to Orders", onBack, Modifier.padding(top = 12.dp), variant = ButtonVariant.Secondary)
                 }
                 return@Column
             }
-            val current = stepIndex(order.status)
-            val times = stepTimes(order.events)
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                FarmCard(Modifier.fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.Top) {
-                        Column(Modifier.weight(1f)) {
-                            FText("${orderTitle(order.orderType, order.harvestOption)} ${shortId(order.id)}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = FarmColors.TextDark)
-                            FText("Placed ${formatDateTime(order.createdAt)}", variant = TextVariant.Caption)
-                            order.deliveryDate?.let { FText("Delivery by ${formatDate(it)}", variant = TextVariant.Caption) }
+            val stage = railStage(order.status)
+            PullToRefreshBox(refreshing, { refreshing = true; reload++ }, Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FarmCard(Modifier.fillMaxWidth()) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            Column(Modifier.weight(1f)) {
+                                FText("${orderTitle(order.orderType, order.harvestOption)} ${shortId(order.id)}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = FarmColors.TextDark)
+                                FText("Placed ${formatDateTime(order.createdAt)}", variant = TextVariant.Caption)
+                                order.deliveryDate?.let { FText("Delivery by ${formatDate(it)}", variant = TextVariant.Caption) }
+                            }
+                            Text(rupees(order.total), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = FarmColors.Primary)
                         }
-                        Text(rupees(order.total), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = FarmColors.Primary)
-                    }
-                    Column(Modifier.padding(top = 10.dp)) {
-                        order.items.forEach { LineRow("${it.name}  ×${qtyText(it.qty)} ${it.unit}", rupees(it.lineTotal)) }
-                        if (order.deliveryFee > 0) LineRow("Delivery", rupees(order.deliveryFee))
-                        HorizontalDivider(Modifier.padding(vertical = 6.dp), color = Color(0xFFEEEEEE))
-                        Row { FText("Total", variant = TextVariant.Label, modifier = Modifier.weight(1f)); FText(rupees(order.total), variant = TextVariant.Label, color = FarmColors.Primary) }
-                    }
-                    addressLabel(order.deliveryAddress)?.let {
-                        Column(Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFFAFAFA)).padding(10.dp)) {
-                            FText("Delivery Address", variant = TextVariant.Label)
-                            FText("📍 $it", variant = TextVariant.Caption, color = FarmColors.TextLabel)
+                        if (order.status != "CANCELLED") StatusRail(stage, stageText(order.status), Modifier.padding(top = 12.dp))
+                        Column(Modifier.padding(top = 10.dp)) {
+                            order.items.forEach { LineRow("${it.name}  ×${qtyText(it.qty)} ${it.unit}", rupees(it.lineTotal)) }
+                            if (order.deliveryFee > 0) LineRow("Delivery", rupees(order.deliveryFee))
+                            HorizontalDivider(Modifier.padding(vertical = 6.dp), color = Color(0xFFEEEEEE))
+                            Row { FText("Total", variant = TextVariant.Label, modifier = Modifier.weight(1f)); FText(rupees(order.total), variant = TextVariant.Label, color = FarmColors.Primary) }
                         }
+                        addressLabel(order.deliveryAddress)?.let {
+                            Column(Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFFAFAFA)).padding(10.dp)) {
+                                FText("Delivery Address", variant = TextVariant.Label)
+                                FText("📍 $it", variant = TextVariant.Caption, color = FarmColors.TextLabel)
+                            }
+                        }
+                    }
+                    FText("Order Timeline", variant = TextVariant.Label)
+                    FarmCard(Modifier.fillMaxWidth()) {
+                        if (order.status == "CANCELLED") {
+                            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                                FText("Cancelled", variant = TextVariant.H2, color = Color(0xFFC2412D))
+                                val refunded = order.payments.filter { it.kind == "REFUND" && it.status == "SUCCEEDED" }.sumOf { it.amount }
+                                FText(
+                                    if (refunded > 0) "This order was cancelled. ${rupees(refunded)} was refunded to you."
+                                    else "This order was cancelled. Any payment is refunded to you.",
+                                    variant = TextVariant.Caption, textAlign = TextAlign.Center,
+                                )
+                            }
+                        } else {
+                            VerticalRail(stage, stageTimes(order.events))
+                        }
+                    }
+                    order.rating?.let { r ->
+                        FarmCard(Modifier.fillMaxWidth()) {
+                            FText("Your rating: ${"★".repeat(r.score)}${"☆".repeat(5 - r.score)}", variant = TextVariant.Label)
+                            r.comment?.let { FText(it, variant = TextVariant.Caption) }
+                        }
+                    }
+                    when {
+                        order.status == "CANCELLED" -> {}
+                        canRate(order.status, order.rating != null) -> FarmButton("Rate this order", { onTrack(order.id) }, Modifier.fillMaxWidth())
+                        else -> FarmButton("Track delivery", { onTrack(order.id) }, Modifier.fillMaxWidth())
+                    }
+                    if (canCancel(order.status)) {
+                        cancelError?.let { Text(it, color = Color(0xFFC2412D), fontSize = 13.sp) }
+                        FarmButton(
+                            if (cancelling) "Cancelling…" else "Cancel order", { confirmCancel = true },
+                            Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary, enabled = !cancelling,
+                        )
                     }
                 }
-                FText("Order Timeline", variant = TextVariant.Label)
-                FarmCard(Modifier.fillMaxWidth()) {
-                    if (order.status == "CANCELLED") {
-                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("❌", fontSize = 32.sp)
-                            FText("Order Cancelled", variant = TextVariant.H2, color = Color(0xFFC62828))
-                            FText("This order was cancelled. Any payment is refunded to you.", variant = TextVariant.Caption, textAlign = TextAlign.Center)
-                        }
-                    } else {
-                        TIMELINE_STEPS.forEachIndexed { idx, step -> TimelineStep(step, current, idx, idx == TIMELINE_STEPS.size - 1, times[idx]) }
-                    }
-                }
-                FarmButton("Track delivery and rate", { onTrack(order.id) }, Modifier.fillMaxWidth())
             }
         }
     }
@@ -324,37 +423,6 @@ private fun LineRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
         FText(label, variant = TextVariant.Caption, color = Color(0xFF444444), modifier = Modifier.weight(1f))
         FText(value, variant = TextVariant.Caption, color = Color(0xFF444444))
-    }
-}
-
-@Composable
-private fun TimelineStep(status: String, current: Int, index: Int, isLast: Boolean, at: String?) {
-    val meta = statusMeta(status)
-    val done = index < current
-    val isCurrent = index == current
-    val future = index > current
-    val dot = when { done -> FarmColors.Primary; isCurrent -> hex(meta.color); else -> Color(0xFFCCCCCC) }
-    Row {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.size(28.dp).clip(CircleShape).background(dot), contentAlignment = Alignment.Center) {
-                when {
-                    done -> Text("✓", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    isCurrent -> Text(meta.emoji, fontSize = 13.sp)
-                    else -> Box(Modifier.size(10.dp).clip(CircleShape).background(Color.White))
-                }
-            }
-            if (!isLast) Box(Modifier.width(2.dp).height(30.dp).background(if (done) FarmColors.Primary else Color(0xFFE0E0E0)))
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.alpha(if (future) 0.6f else 1f).padding(top = 4.dp)) {
-            Text(
-                meta.label, fontSize = 14.sp,
-                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                color = when { isCurrent -> hex(meta.color); done -> FarmColors.Primary; else -> Color(0xFFBBBBBB) },
-            )
-            if (!future && at != null) FText(formatDateTime(at), variant = TextVariant.Caption, color = if (isCurrent) hex(meta.color) else FarmColors.TextMuted)
-            if (isCurrent && at == null) FText("Current status", variant = TextVariant.Caption, color = hex(meta.color))
-        }
     }
 }
 
@@ -463,7 +531,7 @@ fun TrackingScreen(orderId: String, onBack: () -> Unit, onOrders: () -> Unit) {
     val latestOrder by androidx.compose.runtime.rememberUpdatedState(order)
     LaunchedEffect(orderId) {
         while (true) {
-            track = runCatching { LogisticsApi.track(orderId) }.getOrElse { track }
+            load { LogisticsApi.track(orderId) }.onSuccess { track = it } // keep the last position on a failed poll
             val o = latestOrder
             if (o != null && !shouldPoll(phaseOf(o.status, track))) break
             delay(10_000)
@@ -494,6 +562,18 @@ fun TrackingScreen(orderId: String, onBack: () -> Unit, onOrders: () -> Unit) {
 
         Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             FText(phase.text, variant = TextVariant.H2, fontSize = 18.sp)
+            val dropStop = t?.stop
+            val otp = dropStop?.otp
+            if (live && dropStop != null && otp != null && !dropStop.otpVerified) {
+                FarmCard(Modifier.fillMaxWidth(), background = Color(0xFFF1F8F4), border = BorderStroke(1.dp, Color(0xFFC8E6C9))) {
+                    FText("Your delivery code", variant = TextVariant.Label)
+                    Text(
+                        otp, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = 6.sp, color = FarmColors.PrimaryDark,
+                        modifier = Modifier.semantics { contentDescription = "Delivery code ${otp.toList().joinToString(" ")}" },
+                    )
+                    FText("Give this code to the delivery partner when your order arrives. Do not share it before.", variant = TextVariant.Caption)
+                }
+            }
             if (live) {
                 FarmCard(Modifier.fillMaxWidth()) {
                     TrackingMap(partner, drop, if (phase == Phase.POOLED) pickup else null)
@@ -581,7 +661,7 @@ private fun RatingForm(orderId: String, onRated: () -> Unit) {
             scope.launch {
                 try {
                     val res = OrderApi.rateOrder(orderId, OrderRatingCreate(score, comment.trim().ifEmpty { null }))
-                    if (res.ok) { runCatching { res.decode<OrderRating>() }; onRated() } else {
+                    if (res.ok) onRated() else {
                         val msg = RATE_ERRORS[res.error()?.code ?: ""] ?: "Could not save your rating. Try again."
                         message = msg
                         if (msg.startsWith("You already")) onRated()

@@ -215,7 +215,14 @@ data class Pool(
 )
 
 @Serializable
-data class TrackStop(val lat: Double, val lng: Double, val address: String? = null)
+data class TrackStop(
+    val lat: Double,
+    val lng: Double,
+    val address: String? = null,
+    /** The code the customer gives the partner at the door; logistics sends it with the drop stop. */
+    val otp: String? = null,
+    val otpVerified: Boolean = false,
+)
 
 /** GET /logistics/orders/{id}/track. Everything but orderId can be missing. */
 @Serializable

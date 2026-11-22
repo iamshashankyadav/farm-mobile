@@ -224,6 +224,10 @@ object OrderApi {
         return res.decode()
     }
 
+    /** Cancel an order (allowed until QC_PASSED); the server records the refund. Returns the raw result. */
+    suspend fun cancelOrder(orderId: String): HttpResult =
+        Http.post("/order/orders/${Http.enc(orderId)}/cancel", "{}")
+
     suspend fun rateOrder(orderId: String, body: OrderRatingCreate): HttpResult =
         Http.post("/order/orders/${Http.enc(orderId)}/rating", Http.encode(body))
 
