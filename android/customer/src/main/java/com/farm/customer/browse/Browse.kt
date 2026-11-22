@@ -1,8 +1,12 @@
 package com.farm.customer.browse
 
 import com.farm.core.api.CatalogApi
+import com.farm.core.api.ListingFeature
 import com.farm.core.api.MediaOut
 import com.farm.core.api.load
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -49,24 +53,40 @@ data class ProduceListing(
     val pickupCoordinates: List<Double> = listOf(0.0, 0.0),
     val mediaIds: List<String> = emptyList(),
     val photos: List<ProducePhoto> = emptyList(),
+    val farmRating: Double? = null,
+    val farmRatingCount: Int = 0,
 ) {
     val displayName: String get() = cropName + (variety?.let { " ($it)" } ?: "")
 }
 
-enum class SortOption(val label: String) {
-    DISTANCE("Nearest"), PRICE_ASC("Price: Low to High"), PRICE_DESC("Price: High to Low"), HARVEST_DATE("Freshest Harvest")
+/** The catalog's search orders ("distance", "price" low to high, "newest"). */
+enum class SortOption(val label: String, val api: String) {
+    DISTANCE("Nearest", "distance"), PRICE_ASC("Price: low to high", "price"), NEWEST("Newest", "newest")
 }
 
+/**
+ * Everything except [query] is sent to the catalog search; [query] only narrows the loaded page on
+ * the device (the API has no free-text search).
+ */
 data class FilterState(
     val query: String = "",
     val crop: String? = null,
     val radiusKm: Int = 15,
     val organicOnly: Boolean = false,
+    /** Minimum grade: "B" returns A and B. "ALL" sends nothing. */
     val minGrade: String = "ALL",
     val minPrice: Double? = null,
     val maxPrice: Double? = null,
     val sort: SortOption = SortOption.DISTANCE,
+    /** Only farms marked as favourites on this phone (filtered on the device). */
+    val favouritesOnly: Boolean = false,
 )
+
+/** The catalog rejects a radius above 100 km (422) and needs more than 0. */
+fun clampRadius(km: Int): Int = km.coerceIn(1, 100)
+
+/** Listings per search page (the server allows up to 50). */
+const val LISTING_PAGE_SIZE = 20
 
 data class LocationCoords(val name: String, val latitude: Double, val longitude: Double)
 
@@ -91,36 +111,22 @@ fun haversineM(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
 
 // ─── Filtering ──────────────────────────────────────────────────────────────
 
-private val GRADE_RANK = mapOf("A" to 3, "B" to 2, "C" to 1)
-
-fun filterListings(listings: List<ProduceListing>, f: FilterState): List<ProduceListing> = listings.filter { item ->
-    val q = f.query.trim().lowercase()
-    if (q.isNotEmpty()) {
-        val hit = item.cropName.lowercase().contains(q) || item.variety?.lowercase()?.contains(q) == true ||
-            item.farmName.lowercase().contains(q) || item.district.lowercase().contains(q) ||
-            item.village?.lowercase()?.contains(q) == true
-        if (!hit) return@filter false
-    }
-    if (f.crop != null && f.crop != "ALL" && !item.cropId.equals(f.crop, ignoreCase = true)) return@filter false
-    if (f.radiusKm > 0 && item.distanceM > f.radiusKm * 1000) return@filter false
-    if (f.organicOnly && !item.isOrganic) return@filter false
-    if (f.minGrade != "ALL") {
-        val g = item.grade ?: return@filter false
-        if ((GRADE_RANK[g] ?: 0) < (GRADE_RANK[f.minGrade] ?: 0)) return@filter false
-    }
-    if (f.minPrice != null && f.minPrice > 0 && item.pricePerUnit < f.minPrice) return@filter false
-    if (f.maxPrice != null && f.maxPrice > 0 && item.pricePerUnit > f.maxPrice) return@filter false
-    true
+/** The text box narrows the loaded results by crop, variety, farm or place. */
+fun matchesQuery(item: ProduceListing, query: String): Boolean {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return true
+    return item.cropName.lowercase().contains(q) || item.variety?.lowercase()?.contains(q) == true ||
+        item.farmName.lowercase().contains(q) || item.district.lowercase().contains(q) ||
+        item.village?.lowercase()?.contains(q) == true
 }
 
-private fun epochOf(date: String): Long = runCatching { LocalDate.parse(date.take(10)).toEpochDay() }.getOrDefault(0)
+/** True when a change to [next] needs a new search (anything but the text query). */
+fun needsRefetch(prev: FilterState, next: FilterState): Boolean =
+    prev.copy(query = "", favouritesOnly = false) != next.copy(query = "", favouritesOnly = false)
 
-fun sortListings(listings: List<ProduceListing>, sort: SortOption): List<ProduceListing> = when (sort) {
-    SortOption.DISTANCE -> listings.sortedBy { it.distanceM }
-    SortOption.PRICE_ASC -> listings.sortedBy { it.pricePerUnit }
-    SortOption.PRICE_DESC -> listings.sortedByDescending { it.pricePerUnit }
-    SortOption.HARVEST_DATE -> listings.sortedByDescending { epochOf(it.harvestDate) }
-}
+/** The device-side filters: the text box and "favourite farms only". */
+fun applyLocalFilters(items: List<ProduceListing>, f: FilterState, favouriteFarmIds: Set<String>): List<ProduceListing> =
+    items.filter { matchesQuery(it, f.query) && (!f.favouritesOnly || it.farmId in favouriteFarmIds) }
 
 // ─── Formatting ─────────────────────────────────────────────────────────────
 
@@ -129,6 +135,19 @@ fun formatDistance(metres: Double): String {
     if (metres < 1000) return "${metres.roundToInt()} m"
     val km = metres / 1000
     return if (km < 10) String.format(Locale.US, "%.1f km", km) else "${km.roundToInt()} km"
+}
+
+/** 4.25 -> "4.3", 4.0 -> "4.0"; null when not rated yet. */
+fun formatRating(rating: Double?): String? = rating?.let { String.format(Locale.US, "%.1f", it) }
+
+/** "★ 4.3 (12)", or "Not rated yet" for a farm with no rating. */
+fun ratingLabel(rating: Double?, count: Int): String =
+    formatRating(rating)?.let { "★ $it ($count)" } ?: "Not rated yet"
+
+/** Five stars, filled to the nearest whole star: "★★★★☆". */
+fun ratingStars(rating: Double): String {
+    val full = rating.roundToInt().coerceIn(0, 5)
+    return "★".repeat(full) + "☆".repeat(5 - full)
 }
 
 private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
@@ -142,10 +161,10 @@ fun formatHarvestDate(date: String): String = runCatching {
 data class GradeMeta(val label: String, val bg: String, val fg: String, val description: String)
 
 fun gradeMeta(grade: String?): GradeMeta = when (grade) {
-    "A" -> GradeMeta("Grade A", "#d8f3dc", "#1b4332", "Premium quality - highest size, uniformity and freshness standard")
-    "B" -> GradeMeta("Grade B", "#e0e7ff", "#3730a3", "Standard quality - fresh and nutritious with minor cosmetic variation")
-    "C" -> GradeMeta("Grade C", "#fef3c7", "#92400e", "Commercial grade - great for cooking, preserves and juices")
-    else -> GradeMeta("Ungraded", "#f3f4f6", "#6b7280", "Quality inspection pending")
+    "A" -> GradeMeta("Grade A", "#E3F1E9", "#155C3A", "Premium quality - highest size, uniformity and freshness standard")
+    "B" -> GradeMeta("Grade B", "#E8EEFB", "#2F5FD0", "Standard quality - fresh and nutritious with minor cosmetic variation")
+    "C" -> GradeMeta("Grade C", "#FBF3E6", "#B7791F", "Commercial grade - great for cooking, preserves and juices")
+    else -> GradeMeta("Ungraded", "#E6E9EB", "#4B5258", "Quality inspection pending")
 }
 
 data class PhotoVerification(
@@ -156,11 +175,11 @@ data class PhotoVerification(
 /** "Photos with verified badge": geo-verified means the photo was taken on the farm. */
 fun photoVerification(photo: ProducePhoto?): PhotoVerification {
     if (photo == null) {
-        return PhotoVerification(false, "Photo Unverified", "Unverified", "#f3f4f6", "#6b7280", "#d1d5db", "No GPS metadata found in photo")
+        return PhotoVerification(false, "Photo Unverified", "Unverified", "#E6E9EB", "#4B5258", "#C9CFD4", "No GPS metadata found in photo")
     }
     if (photo.isGeoVerified) {
         val dist = photo.distanceM?.let { " (${formatDistance(it)} from farm centroid)" } ?: ""
-        return PhotoVerification(true, "✓ Verified Farm Photo", "✓ Verified", "#dcfce7", "#166534", "#86efac", "GPS verified: Photo taken at the farm location$dist")
+        return PhotoVerification(true, "✓ Verified Farm Photo", "✓ Verified", "#E3F1E9", "#155C3A", "#1D7A4D", "GPS verified: Photo taken at the farm location$dist")
     }
     val desc = when {
         photo.geoStatus == "TOO_FAR" -> "Photo taken too far from farm location" +
@@ -169,7 +188,7 @@ fun photoVerification(photo: ProducePhoto?): PhotoVerification {
         photo.rejectReason != null -> photo.rejectReason
         else -> "Photo could not be verified at farm coordinates"
     }
-    return PhotoVerification(false, "⚠ Unverified Photo", "⚠ Unverified", "#fee2e2", "#991b1b", "#fca5a5", desc)
+    return PhotoVerification(false, "⚠ Unverified Photo", "⚠ Unverified", "#FBEAE7", "#C2412D", "#C2412D", desc)
 }
 
 fun cropEmoji(cropId: String): String = when (cropId) {
@@ -179,6 +198,23 @@ fun cropEmoji(cropId: String): String = when (cropId) {
 
 // ─── Data: the catalog service only. A failed call throws; nothing is invented. ─────────────
 
+/** One page of search results and the cursor of the next page (null on the last one). */
+data class ListingPage(val listings: List<ProduceListing>, val nextCursor: String?)
+
+/** A search hit as a listing. GeoJSON coordinates are [lng, lat]; a hit without a point keeps [fallback]. */
+fun ListingFeature.toListing(fallback: List<Double>): ProduceListing {
+    val p = properties
+    val coords = geometry?.coordinates?.takeIf { it.size >= 2 } ?: fallback
+    return ProduceListing(
+        id = p.id, farmId = p.farmId, farmName = p.farmName, farmerId = p.farmerId, cropId = p.cropId,
+        cropName = p.cropName, variety = p.variety, unit = p.unit, pricePerUnit = p.pricePerUnit,
+        qtyAvailable = p.qtyAvailable, harvestDate = p.harvestDate, grade = p.grade, isOrganic = p.isOrganic,
+        description = p.description, distanceM = p.distanceM, district = p.district, village = p.village,
+        status = p.status, pickupCoordinates = coords, mediaIds = p.mediaIds,
+        farmRating = p.farmRating, farmRatingCount = p.farmRatingCount,
+    )
+}
+
 object BrowseRepository {
     private fun MediaOut.toPhoto() = ProducePhoto(
         id = id, url = url ?: thumbUrl ?: "", thumbUrl = thumbUrl ?: url ?: "",
@@ -186,36 +222,44 @@ object BrowseRepository {
     )
 
     /**
-     * Nearby produce (GET /catalog/listings/search). Throws [com.farm.core.api.NetworkException] or
-     * [com.farm.core.api.ApiException] on failure. A photo that cannot be loaded is left out.
+     * One page of nearby produce (GET /catalog/listings/search). Throws
+     * [com.farm.core.api.NetworkException] or [com.farm.core.api.ApiException] on failure. The
+     * cover photo of each hit is loaded alongside; one that cannot be loaded is left out.
      */
-    suspend fun fetchNearby(lat: Double, lng: Double, radiusKm: Int, crop: String?, organic: Boolean?): List<ProduceListing> {
-        val geo = CatalogApi.searchListings(lat, lng, radiusKm = radiusKm, crop = crop, organic = organic)
-        return geo.features.map { f ->
-            val p = f.properties
-            val coords = f.geometry?.coordinates?.takeIf { it.size >= 2 } ?: listOf(lng, lat)
-            val photos = p.mediaIds.firstOrNull()?.let { id -> load { listOf(CatalogApi.getMedia(id).toPhoto()) }.getOrNull() } ?: emptyList()
-            ProduceListing(
-                id = p.id, farmId = p.farmId, farmName = p.farmName, farmerId = p.farmerId, cropId = p.cropId,
-                cropName = p.cropName, variety = p.variety, unit = p.unit, pricePerUnit = p.pricePerUnit,
-                qtyAvailable = p.qtyAvailable, harvestDate = p.harvestDate, grade = p.grade, isOrganic = p.isOrganic,
-                description = p.description, distanceM = p.distanceM, district = p.district, village = p.village,
-                status = p.status, pickupCoordinates = coords, mediaIds = p.mediaIds, photos = photos,
-            )
-        }
+    suspend fun search(lat: Double, lng: Double, f: FilterState, cursor: String? = null): ListingPage = coroutineScope {
+        val geo = CatalogApi.searchListings(
+            lat, lng,
+            radiusKm = clampRadius(f.radiusKm),
+            crop = f.crop?.takeIf { it != "ALL" },
+            minPrice = f.minPrice?.takeIf { it > 0 },
+            maxPrice = f.maxPrice?.takeIf { it > 0 },
+            grade = f.minGrade.takeIf { it != "ALL" },
+            organic = if (f.organicOnly) true else null,
+            sort = f.sort.api,
+            limit = LISTING_PAGE_SIZE,
+            cursor = cursor,
+        )
+        val listings = geo.features.map { feature ->
+            async {
+                val listing = feature.toListing(listOf(lng, lat))
+                val cover = listing.mediaIds.firstOrNull()?.let { id -> load { CatalogApi.getMedia(id).toPhoto() }.getOrNull() }
+                listing.copy(photos = listOfNotNull(cover))
+            }
+        }.awaitAll()
+        ListingPage(listings, geo.nextCursor)
     }
 
-    /** One listing (GET /catalog/listings/{id}). Throws on failure. */
-    suspend fun fetchDetail(listingId: String): ProduceListing {
+    /** One listing (GET /catalog/listings/{id}) with all its photos. Throws on failure. */
+    suspend fun fetchDetail(listingId: String): ProduceListing = coroutineScope {
         val out = CatalogApi.getListing(listingId)
-        val photos = out.mediaIds.mapNotNull { id -> load { CatalogApi.getMedia(id).toPhoto() }.getOrNull() }
-        return ProduceListing(
+        val photos = out.mediaIds.map { id -> async { load { CatalogApi.getMedia(id).toPhoto() }.getOrNull() } }.awaitAll().filterNotNull()
+        ProduceListing(
             id = out.id, farmId = out.farmId, farmName = out.farmName, farmerId = out.farmerId, cropId = out.cropId,
             cropName = out.cropName, variety = out.variety, unit = out.unit, pricePerUnit = out.pricePerUnit,
             qtyAvailable = out.qtyAvailable, harvestDate = out.harvestDate, grade = out.grade, isOrganic = out.isOrganic,
             description = out.description, distanceM = 0.0, district = out.district, village = out.village,
             status = out.status, pickupCoordinates = out.pickupLocation?.coordinates ?: listOf(0.0, 0.0),
-            mediaIds = out.mediaIds, photos = photos,
+            mediaIds = out.mediaIds, photos = photos, farmRating = out.farmRating, farmRatingCount = out.farmRatingCount,
         )
     }
 }

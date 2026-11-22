@@ -6,7 +6,10 @@ import java.time.LocalDate
 import java.util.Locale
 
 enum class StopType { PICKUP, DROP }
-enum class StopStatus { PENDING, DONE, SKIPPED }
+enum class StopStatus { PENDING, ARRIVED, DONE, SKIPPED }
+
+/** True while a stop still has to be worked (not yet arrived, or arrived but not finished). */
+val StopStatus.open: Boolean get() = this == StopStatus.PENDING || this == StopStatus.ARRIVED
 
 /** One stop as the route screen and the pickup / delivery sheets show it. */
 data class RouteStop(
@@ -21,7 +24,10 @@ data class RouteStop(
     val lng: Double,
     val customerName: String,
     val items: List<String>,
-    val otp: String? = null,
+    /** Dialable phone of the customer (drop) or farm contact; null when the API has none. */
+    val phone: String? = null,
+    /** Dispatcher or customer notes for this stop. */
+    val notes: String? = null,
 )
 
 data class RouteSummary(
@@ -37,7 +43,8 @@ private fun shortOrder(orderId: String) = "#${orderId.take(8)}"
 private fun statusOf(s: String): StopStatus = when (s) {
     "DONE" -> StopStatus.DONE
     "SKIPPED" -> StopStatus.SKIPPED
-    else -> StopStatus.PENDING // PENDING, and ARRIVED (arrived but not finished: still the stop to work on)
+    "ARRIVED" -> StopStatus.ARRIVED
+    else -> StopStatus.PENDING
 }
 
 private fun trimNumber(v: Double): String = if (v % 1.0 == 0.0) v.toLong().toString() else v.toString()
@@ -60,7 +67,8 @@ fun toRouteStop(stop: Stop): RouteStop {
         lng = stop.lng,
         customerName = name ?: if (type == StopType.PICKUP) "Farm" else "Customer",
         items = listOf("Order ${shortOrder(stop.orderId)}$weight"),
-        otp = stop.otp?.ifEmpty { null },
+        phone = stop.customerPhone?.trim()?.ifEmpty { null },
+        notes = stop.notes?.trim()?.ifEmpty { null },
     )
 }
 
@@ -69,19 +77,42 @@ fun routeStops(pool: Pool?): List<RouteStop> =
     pool?.stops.orEmpty().sortedBy { it.seq }.map(::toRouteStop)
 
 fun routeSummary(stops: List<RouteStop>): RouteSummary {
-    val worked = stops.count { it.status != StopStatus.PENDING }
+    val worked = stops.count { !it.status.open }
     return RouteSummary(
         pickups = stops.count { it.type == StopType.PICKUP },
         drops = stops.count { it.type == StopType.DROP },
         done = stops.count { it.status == StopStatus.DONE },
         finished = stops.isNotEmpty() && worked == stops.size,
-        next = stops.firstOrNull { it.status == StopStatus.PENDING },
+        next = stops.firstOrNull { it.status.open },
     )
 }
+
+/** Replaces one stop with the server's answer in a loaded pool, so the screen updates before the route is re-read. */
+fun withStop(pool: Pool?, updated: Stop): Pool? =
+    pool?.copy(stops = pool.stops.map { if (it.id == updated.id) updated else it })
 
 /** Marks one stop done in a loaded pool, so the screen updates before the route is re-read. */
 fun markStopDone(pool: Pool?, stopId: String): Pool? =
     pool?.copy(stops = pool.stops.map { if (it.id == stopId) it.copy(status = "DONE") else it })
+
+/** A phone number as a tel: URI ("+91 94000 00001" -> "tel:+919400000001"); null without digits. */
+fun dialUri(phone: String?): String? {
+    val cleaned = phone?.filter { it.isDigit() || it == '+' }?.takeIf { it.any(Char::isDigit) } ?: return null
+    return "tel:$cleaned"
+}
+
+/** Total straight-line distance of the route through its stops in order, in metres. */
+fun routeLengthM(stops: List<RouteStop>): Double =
+    stops.zipWithNext().sumOf { (a, b) -> haversine(a.lat, a.lng, b.lat, b.lng) }
+
+private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val r = 6371000.0
+    val dp = Math.toRadians(lat2 - lat1)
+    val dl = Math.toRadians(lon2 - lon1)
+    val a = Math.sin(dp / 2).let { it * it } +
+        Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dl / 2).let { it * it }
+    return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
 
 /** Local calendar date as YYYY-MM-DD (the pool date the partner means by "today"). */
 fun localIsoDate(d: LocalDate = LocalDate.now()): String = d.toString()
@@ -89,3 +120,11 @@ fun localIsoDate(d: LocalDate = LocalDate.now()): String = d.toString()
 fun mapsUrl(lat: Double, lng: Double, label: String): String =
     "https://www.google.com/maps/dir/?api=1&destination=$lat,$lng" +
         "&destination_place_id=${java.net.URLEncoder.encode(label, "UTF-8")}&travelmode=driving"
+
+/** [count] days before [today], newest first (the History tab). */
+fun pastDays(today: LocalDate, count: Int): List<LocalDate> = (1..count).map { today.minusDays(it.toLong()) }
+
+/** "Yesterday", else "Mon, 16 Nov". */
+fun dayLabel(day: LocalDate, today: LocalDate): String =
+    if (day == today.minusDays(1)) "Yesterday"
+    else day.format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH))

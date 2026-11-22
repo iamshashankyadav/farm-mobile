@@ -45,6 +45,13 @@ object CatalogApi {
         return res.decode()
     }
 
+    /** The crop catalogue (GET /catalog/crops): stable ids such as "tomato" and display names. */
+    suspend fun listCrops(): List<CropOut> {
+        val res = Http.get("/catalog/crops")
+        if (!res.ok) throw apiError(res, "Could not load the crops")
+        return res.decode()
+    }
+
     suspend fun getMedia(mediaId: String): MediaOut {
         val res = Http.get("/media/${Http.enc(mediaId)}")
         if (!res.ok) throw apiError(res, "Could not load the photo")
@@ -148,13 +155,27 @@ object LogisticsApi {
     private data class DeliverIn(val otp: String, val photoMediaId: String, val notes: String? = null, val deliveredAt: String)
 
     @Serializable
+    private data class StopActionIn(val reason: String? = null, val notes: String? = null)
+
+    @Serializable
     private data class LocationPingIn(
         val lat: Double,
         val lng: Double,
+        val poolId: String? = null,
         val speedMs: Double? = null,
         val heading: Double? = null,
         val accuracyM: Double? = null,
         val recordedAt: String,
+    )
+
+    /** Marks the partner as arrived at a stop (POST /logistics/stops/{id}/arrive). Throws if refused. */
+    suspend fun arrive(stopId: String): Stop = postStop("/stops/${Http.enc(stopId)}/arrive", "{}", "Arrival was not recorded")
+
+    /** Skips a stop that cannot be worked (customer away, farm closed). Throws if refused. */
+    suspend fun skip(stopId: String, reason: String?, notes: String? = null): Stop = postStop(
+        "/stops/${Http.enc(stopId)}/skip",
+        Http.encode(StopActionIn(reason, notes)),
+        "The stop was not skipped",
     )
 
     /** Confirms pickup at a farm stop. Throws with the server's message if refused. */
@@ -181,9 +202,9 @@ object LogisticsApi {
 
     /** Sends one GPS ping. Never throws: returns false when offline or refused. */
     suspend fun sendLocationPing(
-        lat: Double, lng: Double, speed: Double?, heading: Double?, accuracy: Double?, recordedAt: String,
+        lat: Double, lng: Double, speed: Double?, heading: Double?, accuracy: Double?, recordedAt: String, poolId: String? = null,
     ): Boolean = load {
-        Http.post("/logistics/location", Http.encode(LocationPingIn(lat, lng, speed, heading, accuracy, recordedAt))).ok
+        Http.post("/logistics/location", Http.encode(LocationPingIn(lat, lng, poolId, speed, heading, accuracy, recordedAt))).ok
     }.getOrDefault(false)
 
     /** Live position of an order's delivery. null while the order is not in a pool yet. */

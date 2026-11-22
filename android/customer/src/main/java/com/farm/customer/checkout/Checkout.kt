@@ -120,6 +120,9 @@ object CartStore {
     /** The checkout that was just placed, shown on the confirmation screen. */
     var lastCheckout: Checkout? = null
 
+    /** A one-off line for the cart screen (e.g. what "Order again" could not add). */
+    var notice: String? = null
+
     fun add(item: CartItem) { _cart.value = _cart.value.add(item) }
     fun setQty(listingId: String, qty: Double) { _cart.value = _cart.value.setQty(listingId, qty) }
     fun remove(listingId: String) { _cart.value = _cart.value.remove(listingId) }

@@ -168,18 +168,18 @@ fun SharedLoginScreen(
         Spacer(Modifier.height(8.dp))
         FText(appName, variant = TextVariant.H1, textAlign = TextAlign.Center)
         if (appSubtitle != null) {
-            FText(appSubtitle, variant = TextVariant.Caption, color = Color(0xFF666666), textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
+            FText(appSubtitle, variant = TextVariant.Caption, color = FarmColors.TextMuted, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
         }
         Pill(
             "Role: ${requiredRole.uppercase()}", bg = FarmColors.PrimaryLight, fg = FarmColors.Primary,
-            fontSize = 12, border = Color(0xFFC8E6C9), modifier = Modifier.padding(top = 10.dp),
+            fontSize = 12, border = FarmColors.PrimaryLight, modifier = Modifier.padding(top = 10.dp),
         )
         Spacer(Modifier.height(20.dp))
 
         FarmCard(Modifier.fillMaxWidth().widthIn(max = 400.dp)) {
             // Mode switcher
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFFF0F0EB)).padding(4.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(FarmColors.Subtle).padding(4.dp),
             ) {
                 listOf(AuthMode.Otp to "OTP Login", AuthMode.Password to "Password", AuthMode.SignUp to "Sign Up").forEach { (m, label) ->
                     val active = mode == m
@@ -205,10 +205,10 @@ fun SharedLoginScreen(
             if (activeError != null) {
                 Column(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(FarmColors.ErrorBg)
-                        .border(1.dp, Color(0xFFFFCDD2), RoundedCornerShape(8.dp)).padding(12.dp),
+                        .border(1.dp, FarmColors.ErrorBg, RoundedCornerShape(8.dp)).padding(12.dp),
                 ) {
-                    Text("Authentication Error", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
-                    Text(activeError, fontSize = 12.sp, color = Color(0xFFB71C1C))
+                    Text("Authentication Error", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = FarmColors.Error)
+                    Text(activeError, fontSize = 12.sp, color = FarmColors.Error)
                 }
                 Spacer(Modifier.height(14.dp))
             }
@@ -220,7 +220,7 @@ fun SharedLoginScreen(
                 } else {
                     FText("Enter the 6-digit code sent to +91 $phone", textAlign = TextAlign.Center, color = FarmColors.TextLabel, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
                     devCode?.let {
-                        Pill("Dev Code auto-filled: $it", bg = Color(0xFFE3F2FD), fg = Color(0xFF1565C0), fontSize = 12, modifier = Modifier.align(Alignment.CenterHorizontally))
+                        Pill("Dev Code auto-filled: $it", bg = FarmColors.InfoBg, fg = FarmColors.Info, fontSize = 12, modifier = Modifier.align(Alignment.CenterHorizontally))
                     }
                     OtpInput(otp, { otp = it; if (localError != null) localError = null }, enabled = !loading)
                     FarmButton("Verify & Login", ::verifyOtp, Modifier.fillMaxWidth().padding(top = 12.dp), loading = loading)
@@ -229,11 +229,11 @@ fun SharedLoginScreen(
                             if (countdown > 0) "Resend OTP in ${countdown}s" else "Resend OTP",
                             fontSize = 13.sp,
                             fontWeight = if (countdown > 0) FontWeight.Normal else FontWeight.SemiBold,
-                            color = if (countdown > 0) Color(0xFF999999) else FarmColors.Primary,
+                            color = if (countdown > 0) FarmColors.TextMuted else FarmColors.Primary,
                             modifier = Modifier.clickable(enabled = countdown <= 0 && !loading) { sendOtp() },
                         )
                         Text(
-                            "Change Number", fontSize = 13.sp, color = Color(0xFF666666), textDecoration = TextDecoration.Underline,
+                            "Change Number", fontSize = 13.sp, color = FarmColors.TextMuted, textDecoration = TextDecoration.Underline,
                             modifier = Modifier.clickable { otpStep = false; otp = ""; devCode = null; localError = null },
                         )
                     }
@@ -268,7 +268,7 @@ private fun ServerAddressEditor() {
     Spacer(Modifier.height(14.dp))
     if (!editing) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            FText("Server: $current", fontSize = 11.sp, color = Color(0xFF888888), modifier = Modifier.weight(1f))
+            FText("Server: $current", fontSize = 11.sp, color = FarmColors.TextMuted, modifier = Modifier.weight(1f))
             Text(
                 "Change", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FarmColors.Primary,
                 modifier = Modifier.clickable { draft = current; editing = true }.padding(4.dp),

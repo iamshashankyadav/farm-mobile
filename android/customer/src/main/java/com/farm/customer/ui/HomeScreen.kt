@@ -1,5 +1,39 @@
 package com.farm.customer.ui
 
+import com.farm.core.ui.ProfileScreen
+
+import androidx.compose.ui.semantics.semantics
+
+import androidx.compose.ui.semantics.contentDescription
+
+import androidx.compose.foundation.layout.heightIn
+
+import androidx.compose.foundation.layout.WindowInsets
+
+import androidx.compose.material3.NavigationBarItemDefaults
+
+import androidx.compose.material3.NavigationBarItem
+
+import androidx.compose.material3.NavigationBar
+
+import androidx.compose.material3.Scaffold
+
+import androidx.compose.material3.ExperimentalMaterial3Api
+
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+
+import androidx.compose.ui.text.input.ImeAction
+
+import androidx.compose.foundation.text.KeyboardOptions
+
+import androidx.compose.foundation.text.KeyboardActions
+
+import com.farm.customer.prefs.LocalLists
+
+import com.farm.customer.browse.clampRadius
+
+import com.farm.customer.browse.cropEmoji
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -60,15 +94,12 @@ import com.farm.customer.land.SEASON_NAMES
 import com.farm.customer.checkout.CartStore
 import com.farm.customer.land.LandFilterState
 
-private val CROPS = listOf(
-    "ALL" to "🌱 All", "tomato" to "🍅 Tomato", "spinach" to "🥬 Spinach", "onion" to "🧅 Onion",
-    "potato" to "🥔 Potato", "okra" to "🌿 Okra", "carrot" to "🥕 Carrot", "mango" to "🥭 Mango",
-)
 // The land service names its seasons Kharif, Rabi and Zaid; the chip filters on the server.
 private val SEASONS = listOf("ALL" to "All Seasons") + SEASON_NAMES.map { it to it }
 
 class HomeNav(
     val cart: () -> Unit,
+    val order: (String) -> Unit,
     val notifications: () -> Unit,
     val team: () -> Unit,
     val orders: () -> Unit,
@@ -86,44 +117,58 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
     var pickerOpen by remember { mutableStateOf(false) }
     val cartCount = cart.items.sumOf { it.qty }.toInt()
 
-    Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
-        // Header
-        Row(
-            Modifier.fillMaxWidth().background(Color.White).statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(if (vm.tab == HomeTab.PRODUCE) "🥕 Farm Fresh" else "🌾 Farm Land", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = FarmColors.PrimaryDark)
-                Row(Modifier.clickable { pickerOpen = true }.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("📍 ", fontSize = 12.sp)
-                    Text(vm.location.name, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF40916C))
-                    Text(" ▼", fontSize = 10.sp, color = Color(0xFF888888))
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box {
-                    RoundIcon("🛒", Color(0xFFF0FDF4), nav.cart, Color(0xFFBBF7D0))
-                    if (cartCount > 0) {
+    Scaffold(
+        containerColor = FarmColors.Background,
+        bottomBar = { CustomerBottomBar(vm.tab) { vm.tab = it } },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            when (vm.tab) {
+                HomeTab.PRODUCE, HomeTab.LAND -> {
+                    // Top bar: serif title, the place being searched (tap to change), cart and notifications.
+                    Row(
+                        Modifier.fillMaxWidth().background(FarmColors.Surface).statusBarsPadding().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            FText(if (vm.tab == HomeTab.PRODUCE) "Produce" else "Land", variant = TextVariant.H1)
+                            Row(
+                                Modifier.heightIn(min = 32.dp).clickable { pickerOpen = true }
+                                    .semantics { contentDescription = "Location ${vm.location.name}, tap to change" },
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                FText(
+                                    if (vm.tab == HomeTab.PRODUCE) "Fresh from farms near ${vm.location.name}" else "Farm plots to reserve near ${vm.location.name}",
+                                    variant = TextVariant.Caption,
+                                )
+                                Text(" ▾", fontSize = 12.sp, color = FarmColors.Primary)
+                            }
+                        }
                         Box(
-                            Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp).clip(CircleShape).background(FarmColors.Primary)
-                                .padding(horizontal = 5.dp, vertical = 1.dp),
-                        ) { Text(if (cartCount > 99) "99+" else "$cartCount", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold) }
+                            Modifier.size(48.dp).clickable(onClick = nav.cart)
+                                .semantics { contentDescription = if (cartCount > 0) "Cart, $cartCount items" else "Cart" },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("🛒", fontSize = 20.sp)
+                            if (cartCount > 0) {
+                                Box(
+                                    Modifier.align(Alignment.TopEnd).offset(x = (-2).dp, y = 2.dp).clip(CircleShape).background(FarmColors.Primary)
+                                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                                ) { Text(if (cartCount > 99) "99+" else "$cartCount", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+                            }
+                        }
+                        if (auth.isAuthenticated) NotificationBell(nav.notifications, background = FarmColors.Surface)
+                    }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(FarmColors.Border))
+                    Box(Modifier.weight(1f)) {
+                        if (vm.tab == HomeTab.PRODUCE) ProduceTab(vm, nav, onFilter = { filterOpen = true }) else LandTab(vm, nav)
                     }
                 }
-                if (auth.isAuthenticated) NotificationBell(nav.notifications)
-                RoundIcon("👥", FarmColors.Background, nav.team)
-                RoundIcon(if (auth.isAuthenticated) "👤" else "🔑", FarmColors.Background, { if (auth.isAuthenticated) nav.orders() else nav.login() })
+                HomeTab.ORDERS -> OrdersScreen(
+                    onBack = null, onHome = { vm.tab = HomeTab.PRODUCE }, onOrder = nav.order, onNotifications = nav.notifications,
+                )
+                HomeTab.PROFILE -> ProfileScreen("Farm customer", onLogin = nav.login, onTeam = nav.team)
             }
-        }
-
-        // Main tabs
-        Row(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 16.dp)) {
-            TabItem("🥕 Produce (Browse & Buy)", vm.tab == HomeTab.PRODUCE, Modifier.weight(1f)) { vm.tab = HomeTab.PRODUCE }
-            TabItem("🌾 Land (Plots & Crops)", vm.tab == HomeTab.LAND, Modifier.weight(1f)) { vm.tab = HomeTab.LAND }
-        }
-
-        Box(Modifier.weight(1f)) {
-            if (vm.tab == HomeTab.PRODUCE) ProduceTab(vm, nav, onFilter = { filterOpen = true }) else LandTab(vm, nav)
         }
     }
 
@@ -162,48 +207,33 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
     }
 }
 
-@Composable
-private fun RoundIcon(icon: String, bg: Color, onClick: () -> Unit, border: Color? = null) {
-    Box(
-        Modifier.size(38.dp).clip(CircleShape).background(bg)
-            .then(if (border != null) Modifier.border(1.dp, border, CircleShape) else Modifier)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) { Text(icon, fontSize = 17.sp) }
-}
+
 
 @Composable
-private fun TabItem(label: String, active: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Column(modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            label, fontSize = 13.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.SemiBold,
-            color = if (active) FarmColors.Primary else FarmColors.TextMuted, modifier = Modifier.padding(vertical = 12.dp),
-        )
-        Box(Modifier.fillMaxWidth().height(2.5.dp).background(if (active) FarmColors.Primary else Color.Transparent))
-    }
-}
-
-@Composable
-private fun SearchBar(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier) {
+private fun SearchBar(value: String, onChange: (String) -> Unit, placeholder: String, modifier: Modifier, onSearch: (String) -> Unit = {}) {
     Row(
-        modifier.clip(RoundedCornerShape(10.dp)).background(Color.White).border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(10.dp))
+        modifier.clip(RoundedCornerShape(10.dp)).background(Color.White).border(1.dp, FarmColors.Border, RoundedCornerShape(10.dp))
             .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("🔍", fontSize = 14.sp)
         Spacer(Modifier.width(6.dp))
         Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) Text(placeholder, fontSize = 14.sp, color = Color(0xFF999999), maxLines = 1)
-            BasicTextField(value, onChange, singleLine = true, textStyle = TextStyle(fontSize = 14.sp), modifier = Modifier.fillMaxWidth())
+            if (value.isEmpty()) Text(placeholder, fontSize = 14.sp, color = FarmColors.TextMuted, maxLines = 1)
+            BasicTextField(
+                value, onChange, singleLine = true, textStyle = TextStyle(fontSize = 14.sp), modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { onSearch(value) }),
+            )
         }
-        if (value.isNotEmpty()) Text("✕", color = Color(0xFF888888), modifier = Modifier.clickable { onChange("") }.padding(start = 6.dp))
+        if (value.isNotEmpty()) Text("✕", color = FarmColors.TextMuted, modifier = Modifier.clickable { onChange("") }.padding(start = 6.dp))
     }
 }
 
 @Composable
 private fun SmallAction(text: String, onClick: () -> Unit) {
     Box(
-        Modifier.clip(RoundedCornerShape(10.dp)).background(Color.White).border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(10.dp))
+        Modifier.clip(RoundedCornerShape(10.dp)).background(Color.White).border(1.dp, FarmColors.Border, RoundedCornerShape(10.dp))
             .clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 11.dp),
     ) { Text(text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FarmColors.Primary) }
 }
@@ -226,27 +256,44 @@ private fun CenterState(emoji: String, title: String, subtitle: String?, action:
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProduceTab(vm: HomeViewModel, nav: HomeNav, onFilter: () -> Unit) {
+    val favourites by LocalLists.favourites.collectAsState()
+    val recent by LocalLists.recentSearches.collectAsState()
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            SearchBar(vm.filters.query, { vm.updateFilters(vm.filters.copy(query = it)) }, "Search produce, crop, or farm...", Modifier.weight(1f))
+            SearchBar(
+                vm.filters.query, { vm.updateFilters(vm.filters.copy(query = it)) }, "Search produce, crop, or farm...", Modifier.weight(1f),
+                onSearch = LocalLists::addSearch,
+            )
             SmallAction("⚙ Filter", onFilter)
             SmallAction(if (vm.produceMap) "📋 List" else "🗺 Map") { vm.produceMap = !vm.produceMap }
         }
         ChipRow {
-            CROPS.forEach { (id, label) ->
-                Chip(label, (id == "ALL" && vm.filters.crop == null) || vm.filters.crop == id, { vm.toggleCrop(if (id == "ALL") null else id) })
+            Chip("🌱 All", vm.filters.crop == null, { vm.toggleCrop(null) })
+            if (favourites.isNotEmpty()) {
+                Chip("♥ Favourites (${favourites.size})", vm.filters.favouritesOnly, { vm.updateFilters(vm.filters.copy(favouritesOnly = !vm.filters.favouritesOnly)) })
+            }
+            vm.crops.forEach { crop ->
+                Chip("${cropEmoji(crop.id)} ${crop.name.ifBlank { crop.id }}", vm.filters.crop == crop.id, { vm.toggleCrop(crop.id) })
+            }
+        }
+        if (vm.filters.query.isEmpty() && recent.isNotEmpty()) {
+            ChipRow {
+                Text("Recent:", fontSize = 12.sp, color = FarmColors.TextMuted, modifier = Modifier.padding(top = 7.dp))
+                recent.forEach { q -> Chip("🕘 $q", false, { vm.updateFilters(vm.filters.copy(query = q)) }) }
+                Chip("Clear", false, LocalLists::clearSearches)
             }
         }
         vm.produceToast?.let {
-            Banner(it, Color(0xFFE8F5E9), Color(0xFF1B5E20), Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+            Banner(it, FarmColors.PrimaryLight, FarmColors.PrimaryDark, Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                 Text("View Cart →", color = FarmColors.Primary, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.clickable(onClick = nav.cart))
             }
         }
         val listings = vm.listings
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            FText("${listings.size} ${if (listings.size == 1) "listing" else "listings"} within ${vm.filters.radiusKm} km", variant = TextVariant.Caption, modifier = Modifier.weight(1f))
+            FText("${listings.size}${if (vm.produceNextCursor != null) "+" else ""} ${if (listings.size == 1) "listing" else "listings"} within ${clampRadius(vm.filters.radiusKm)} km", variant = TextVariant.Caption, modifier = Modifier.weight(1f))
             Text("🔄 Refresh", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FarmColors.Primary, modifier = Modifier.clickable { vm.refreshProduce() }.padding(4.dp))
         }
         when {
@@ -254,12 +301,26 @@ private fun ProduceTab(vm: HomeViewModel, nav: HomeNav, onFilter: () -> Unit) {
             vm.produceError != null -> ErrorState(vm.produceError, vm::refreshProduce, title = "Could not load produce")
             listings.isEmpty() -> CenterState("🔍", "No produce found", "Nothing within ${vm.filters.radiusKm} km matches. Widen the radius or reset the filters.", "Reset Filters", vm::resetFilters, secondary = true)
             vm.produceMap -> ProduceMapView(listings, vm.location, onOpen = { nav.listing(it.id) }, onAdded = vm::onAddedToCart)
-            else -> LazyColumn(
+            else -> PullToRefreshBox(isRefreshing = false, onRefresh = vm::refreshProduce, modifier = Modifier.fillMaxSize()) { LazyColumn(
                 Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(listings, key = { it.id }) { item -> ListingCard(item, onOpen = { nav.listing(item.id) }, onAdded = vm::onAddedToCart) }
+                items(listings, key = { it.id }) { item ->
+                    ListingCard(item, onOpen = { LocalLists.addSearch(vm.filters.query); nav.listing(item.id) }, onAdded = vm::onAddedToCart)
+                }
+                if (vm.produceNextCursor != null) {
+                    item {
+                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                            vm.produceMoreError?.let { FText(loadErrorMessage(it), variant = TextVariant.Caption, modifier = Modifier.padding(bottom = 6.dp)) }
+                            FarmButton(
+                                if (vm.loadingMoreProduce) "Loading…" else if (vm.produceMoreError != null) "Retry" else "Load more",
+                                vm::loadMoreProduce,
+                                variant = ButtonVariant.Secondary,
+                            )
+                        }
+                    }
+                }
                 item { Spacer(Modifier.navigationBarsPadding()) }
-            }
+            } }
         }
     }
 }
@@ -267,7 +328,7 @@ private fun ProduceTab(vm: HomeViewModel, nav: HomeNav, onFilter: () -> Unit) {
 @Composable
 private fun LandTab(vm: HomeViewModel, nav: HomeNav) {
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().background(Color(0xFFF8FAFC)).padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().background(FarmColors.Background).padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SubTab("🗺 Explore Plots (${vm.plots.size})", vm.landSubTab == LandSubTab.EXPLORE, Modifier.weight(1f)) {
                 vm.landSubTab = LandSubTab.EXPLORE
                 vm.detailPlot = null
@@ -276,7 +337,7 @@ private fun LandTab(vm: HomeViewModel, nav: HomeNav) {
                 vm.landSubTab = LandSubTab.MY_RESERVATIONS
             }
         }
-        vm.landToast?.let { Banner(it, Color(0xFFE8F5E9), Color(0xFF1B5E20), Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+        vm.landToast?.let { Banner(it, FarmColors.PrimaryLight, FarmColors.PrimaryDark, Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
 
         val detail = vm.detailPlot
         if (vm.landSubTab == LandSubTab.EXPLORE && detail != null) {
@@ -319,7 +380,7 @@ private fun LandTab(vm: HomeViewModel, nav: HomeNav) {
                             Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary, enabled = !vm.loadingMorePlots,
                         )
                     }
-                    vm.landMoreError?.let { e -> item { FText(loadErrorMessage(e), variant = TextVariant.Caption, color = Color(0xFFC2412D)) } }
+                    vm.landMoreError?.let { e -> item { FText(loadErrorMessage(e), variant = TextVariant.Caption, color = FarmColors.Error) } }
                     item { Spacer(Modifier.navigationBarsPadding()) }
                 }
             }
@@ -339,10 +400,29 @@ private fun LandTab(vm: HomeViewModel, nav: HomeNav) {
 private fun SubTab(label: String, active: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Box(
         modifier.clip(RoundedCornerShape(8.dp)).background(if (active) Color.White else Color.Transparent)
-            .then(if (active) Modifier.border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(8.dp)) else Modifier)
+            .then(if (active) Modifier.border(1.dp, FarmColors.Border, RoundedCornerShape(8.dp)) else Modifier)
             .clickable(onClick = onClick).padding(vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium, color = if (active) Color(0xFF0F766E) else FarmColors.TextMuted)
+        Text(label, fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium, color = if (active) FarmColors.Primary else FarmColors.TextMuted)
+    }
+}
+
+@Composable
+private fun CustomerBottomBar(current: HomeTab, onSelect: (HomeTab) -> Unit) {
+    NavigationBar(containerColor = FarmColors.Surface, tonalElevation = 0.dp) {
+        listOf(HomeTab.PRODUCE to ("🥕" to "Produce"), HomeTab.LAND to ("🌾" to "Land"), HomeTab.ORDERS to ("📦" to "Orders"), HomeTab.PROFILE to ("👤" to "Profile"))
+            .forEach { (tab, item) ->
+                NavigationBarItem(
+                    selected = current == tab,
+                    onClick = { onSelect(tab) },
+                    icon = { Text(item.first, fontSize = 20.sp) },
+                    label = { Text(item.second, fontSize = 12.sp, fontWeight = if (current == tab) FontWeight.SemiBold else FontWeight.Normal) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedTextColor = FarmColors.Primary, unselectedTextColor = FarmColors.TextMuted,
+                        indicatorColor = FarmColors.PrimaryLight,
+                    ),
+                )
+            }
     }
 }

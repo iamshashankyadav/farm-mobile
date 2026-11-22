@@ -34,7 +34,7 @@ import com.farm.core.api.loadErrorMessage
 // Content, Empty (what to do next) and Error (the server's message, Retry, and for no
 // connection the server address with a way to change it).
 
-private val SkeletonGrey = Color(0xFFE6E9EB)
+private val SkeletonGrey = FarmColors.Subtle
 
 /** Grey placeholder cards in the shape of a list, instead of a spinner over a blank screen. */
 @Composable

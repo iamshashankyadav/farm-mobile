@@ -28,7 +28,7 @@ import com.farm.core.ui.TextVariant
 import com.farm.customer.orders.RAIL_STAGES
 import com.farm.customer.orders.formatDateTime
 
-private val RailGrey = Color(0xFFDFE3E6)
+private val RailGrey = FarmColors.Border
 
 /**
  * The order status rail: eight segments, the first [stage] green and the rest grey, with [label]

@@ -1,5 +1,9 @@
 package com.farm.customer.ui
 
+import com.farm.customer.prefs.LocalLists
+
+import com.farm.customer.browse.applyLocalFilters
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -10,8 +14,10 @@ import com.farm.customer.browse.FilterState
 import com.farm.customer.browse.LocationCoords
 import com.farm.customer.browse.POPULAR_DISTRICTS
 import com.farm.customer.browse.ProduceListing
-import com.farm.customer.browse.filterListings
-import com.farm.customer.browse.sortListings
+import com.farm.customer.browse.matchesQuery
+import com.farm.customer.browse.needsRefetch
+import com.farm.core.api.CatalogApi
+import com.farm.core.api.CropOut
 import com.farm.customer.land.LandFilterState
 import com.farm.customer.land.LandRepository
 import com.farm.customer.land.PlotItem
@@ -25,7 +31,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-enum class HomeTab { PRODUCE, LAND }
+/** The bottom-bar destinations of the customer app. */
+enum class HomeTab { PRODUCE, LAND, ORDERS, PROFILE }
 enum class LandSubTab { EXPLORE, MY_RESERVATIONS }
 
 /** State of the home screen: the Produce tab (useProduceBrowse) and the Land tab (useLand). */
@@ -47,7 +54,19 @@ class HomeViewModel : ViewModel() {
     var produceToast by mutableStateOf<String?>(null)
         private set
 
-    val listings: List<ProduceListing> get() = sortListings(filterListings(allListings, filters), filters.sort)
+    /** The loaded results, narrowed by the text box (the server applies every other filter). */
+    val listings: List<ProduceListing>
+        get() = applyLocalFilters(allListings, filters, LocalLists.favourites.value.map { it.farmId }.toSet())
+    /** Cursor of the next result page; null when everything is loaded. */
+    var produceNextCursor by mutableStateOf<String?>(null)
+        private set
+    var loadingMoreProduce by mutableStateOf(false)
+        private set
+    var produceMoreError by mutableStateOf<Throwable?>(null)
+        private set
+    /** Crop chips, from GET /catalog/crops; empty (only "All") when it cannot be loaded. */
+    var crops by mutableStateOf<List<CropOut>>(emptyList())
+        private set
 
     // Land
     var landFilters by mutableStateOf(LandFilterState())
@@ -85,6 +104,7 @@ class HomeViewModel : ViewModel() {
     private var landJob: Job? = null
 
     init {
+        viewModelScope.launch { load { CatalogApi.listCrops() }.onSuccess { crops = it } }
         refreshProduce()
         refreshLand()
     }
@@ -95,9 +115,9 @@ class HomeViewModel : ViewModel() {
         refreshLand()
     }
 
-    /** Server-side filters (radius, crop, organic) re-query; the rest filter on the device. */
+    /** Every filter but the text query is applied by the server, so changing one searches again. */
     fun updateFilters(next: FilterState) {
-        val refetch = next.radiusKm != filters.radiusKm || next.crop != filters.crop || next.organicOnly != filters.organicOnly
+        val refetch = needsRefetch(filters, next)
         filters = next
         if (refetch) refreshProduce()
     }
@@ -111,15 +131,29 @@ class HomeViewModel : ViewModel() {
         produceJob = viewModelScope.launch {
             produceLoading = true
             produceError = null
-            load {
-                BrowseRepository.fetchNearby(
-                    location.latitude, location.longitude, filters.radiusKm, filters.crop,
-                    if (filters.organicOnly) true else null,
-                )
-            }
-                .onSuccess { allListings = it }
-                .onFailure { allListings = emptyList(); produceError = it }
+            produceMoreError = null
+            load { BrowseRepository.search(location.latitude, location.longitude, filters) }
+                .onSuccess { allListings = it.listings; produceNextCursor = it.nextCursor }
+                .onFailure { allListings = emptyList(); produceNextCursor = null; produceError = it }
             produceLoading = false
+        }
+    }
+
+    /** The next page of results (catalog cursor pagination). */
+    fun loadMoreProduce() {
+        val cursor = produceNextCursor ?: return
+        if (loadingMoreProduce) return
+        loadingMoreProduce = true
+        produceMoreError = null
+        viewModelScope.launch {
+            load { BrowseRepository.search(location.latitude, location.longitude, filters, cursor) }
+                .onSuccess { page ->
+                    val known = allListings.map { it.id }.toSet()
+                    allListings = allListings + page.listings.filter { it.id !in known }
+                    produceNextCursor = page.nextCursor
+                }
+                .onFailure { produceMoreError = it }
+            loadingMoreProduce = false
         }
     }
 

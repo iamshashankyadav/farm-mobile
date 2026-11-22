@@ -1,5 +1,9 @@
 package com.farm.customer.ui
 
+import androidx.compose.runtime.collectAsState
+
+import com.farm.customer.prefs.LocalLists
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,6 +42,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -52,7 +58,9 @@ import com.farm.core.ui.FarmCard
 import com.farm.core.ui.FarmColors
 import com.farm.core.ui.FarmInput
 import com.farm.core.ui.Pill
+import com.farm.core.ui.MapPin
 import com.farm.core.ui.TextVariant
+import com.farm.core.ui.TileMap
 import com.farm.core.ui.hex
 import com.farm.customer.browse.FilterState
 import com.farm.customer.browse.LocationCoords
@@ -61,15 +69,15 @@ import com.farm.customer.browse.ProducePhoto
 import com.farm.customer.browse.SortOption
 import com.farm.customer.browse.cropEmoji
 import com.farm.customer.browse.formatDistance
+import com.farm.customer.browse.formatRating
+import com.farm.customer.browse.ratingLabel
+import com.farm.customer.browse.ratingStars
 import com.farm.customer.browse.formatHarvestDate
 import com.farm.customer.browse.gradeMeta
 import com.farm.customer.browse.photoVerification
 import com.farm.customer.checkout.CartItem
 import com.farm.customer.checkout.CartStore
 import com.farm.customer.checkout.formatRupees
-import com.farm.customer.orders.LatLng
-import com.farm.customer.orders.project
-import kotlin.math.roundToInt
 
 fun ProduceListing.toCartItem(qty: Double = 1.0) = CartItem(
     listingId = id, farmId = farmId, farmName = farmName, name = displayName, unit = unit,
@@ -84,11 +92,11 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifie
         modifier
             .clip(RoundedCornerShape(18.dp))
             .background(if (selected) FarmColors.Primary else Color.White)
-            .border(1.dp, if (selected) FarmColors.Primary else Color(0xFFE0E0E0), RoundedCornerShape(18.dp))
+            .border(1.dp, if (selected) FarmColors.Primary else FarmColors.Border, RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
     ) {
-        Text(text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (selected) Color.White else Color(0xFF444444))
+        Text(text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (selected) Color.White else FarmColors.TextBody)
     }
 }
 
@@ -113,14 +121,17 @@ fun ListingCard(listing: ProduceListing, onOpen: () -> Unit, onAdded: (ProduceLi
     val photo = listing.photos.firstOrNull()
     val grade = gradeMeta(listing.grade)
     FarmCard(Modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(0.dp), onClick = onOpen) {
-        Box(Modifier.fillMaxWidth().height(150.dp).background(Color(0xFFF0FDF4))) {
+        Box(Modifier.fillMaxWidth().height(150.dp).background(FarmColors.PrimaryLight)) {
             if (photo != null && photo.url.isNotEmpty()) {
                 AsyncImage(model = photo.thumbUrl.ifEmpty { photo.url }, contentDescription = listing.cropName, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             } else {
                 Text("🥕", fontSize = 48.sp, modifier = Modifier.align(Alignment.Center))
             }
             VerifiedBadge(photo, compact = true, modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
-            if (listing.isOrganic) Pill("🌱 Organic", Color(0xFF2D6A4F), Color.White, Modifier.align(Alignment.TopEnd).padding(8.dp))
+            Row(Modifier.align(Alignment.TopEnd).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (listing.isOrganic) Pill("🌱 Organic", FarmColors.Primary, Color.White)
+                FavouriteButton(listing.farmId, listing.farmName)
+            }
         }
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.Top) {
@@ -131,9 +142,10 @@ fun ListingCard(listing: ProduceListing, onOpen: () -> Unit, onAdded: (ProduceLi
                 if (listing.grade != null) Pill(grade.label, hex(grade.bg), hex(grade.fg))
             }
             FText("🏡 ${listing.farmName}", variant = TextVariant.Label, modifier = Modifier.padding(top = 6.dp))
+            FarmRatingText(listing.farmRating, listing.farmRatingCount, Modifier.padding(top = 2.dp))
             Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("📍 ${formatDistance(listing.distanceM)} away", fontSize = 12.sp, color = Color(0xFF40916C), fontWeight = FontWeight.SemiBold)
-                Text("  •  ", fontSize = 12.sp, color = Color(0xFFBBBBBB))
+                Text("📍 ${formatDistance(listing.distanceM)} away", fontSize = 12.sp, color = FarmColors.Primary, fontWeight = FontWeight.SemiBold)
+                Text("  •  ", fontSize = 12.sp, color = FarmColors.InputBorder)
                 FText(formatHarvestDate(listing.harvestDate), variant = TextVariant.Caption)
             }
             Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -176,7 +188,7 @@ fun FilterSheet(filters: FilterState, onApply: (FilterState) -> Unit, onReset: (
                 }
             }
             Row(
-                Modifier.fillMaxWidth().padding(top = 18.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFF8FAF8))
+                Modifier.fillMaxWidth().padding(top = 18.dp).clip(RoundedCornerShape(10.dp)).background(FarmColors.Background)
                     .clickable { draft = draft.copy(organicOnly = !draft.organicOnly) }.padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -215,84 +227,54 @@ private fun Section(title: String, content: @Composable () -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
 }
 
-/**
- * Pin markers placed on a plain canvas by their real coordinates around the customer.
- * (The React app also drew a canvas; no map SDK / API key is needed.)
- */
+/** Heart that marks a farm as a favourite on this phone (48 dp touch target). */
 @Composable
-fun <T> PinCanvas(
-    center: LocationCoords,
-    items: List<T>,
-    coord: (T) -> LatLng,
-    key: (T) -> String,
-    selectedKey: String?,
-    onSelect: (T) -> Unit,
-    pin: @Composable (T, Boolean) -> Unit,
-    banner: String,
-    modifier: Modifier = Modifier,
-) {
-    BoxWithConstraints(modifier.fillMaxWidth().background(Color(0xFFE8F3EC))) {
-        val density = LocalDensity.current
-        val wPx = with(density) { maxWidth.toPx() }
-        val hPx = with(density) { maxHeight.toPx() }
-        val points = listOf("__you" to LatLng(center.latitude, center.longitude)) + items.map { key(it) to coord(it) }
-        val markers = project(points, wPx, hPx, padding = with(density) { 56.dp.toPx() }).associateBy { it.key }
-
-        // grid
-        Column(Modifier.fillMaxSize()) {
-            repeat(8) { Box(Modifier.fillMaxWidth().weight(1f).border(0.5.dp, Color(0x1A2D6A4F))) }
-        }
-        markers["__you"]?.let { m ->
-            Column(
-                Modifier.offset { IntOffset((m.x - with(density) { 50.dp.toPx() }).roundToInt(), (m.y - with(density) { 20.dp.toPx() }).roundToInt()) }.width(100.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Box(Modifier.size(40.dp).clip(CircleShape).background(Color(0x332563EB)), contentAlignment = Alignment.Center) { Text("📍", fontSize = 20.sp) }
-                Text("You (${center.name})", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A),
-                    modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color.White).padding(horizontal = 4.dp, vertical = 1.dp))
-            }
-        }
-        items.forEach { item ->
-            val m = markers[key(item)] ?: return@forEach
-            Box(
-                Modifier.offset { IntOffset((m.x - with(density) { 36.dp.toPx() }).roundToInt(), (m.y - with(density) { 34.dp.toPx() }).roundToInt()) }
-                    .width(72.dp).clickable { onSelect(item) },
-                contentAlignment = Alignment.Center,
-            ) { pin(item, key(item) == selectedKey) }
-        }
-        Text(
-            banner, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White,
-            modifier = Modifier.align(Alignment.TopCenter).padding(10.dp).clip(RoundedCornerShape(14.dp))
-                .background(Color(0xCC1B4332)).padding(horizontal = 12.dp, vertical = 6.dp),
-        )
-    }
-}
-
-@Composable
-fun PinBubble(icon: String, text: String, selected: Boolean, accent: Color = FarmColors.Primary) {
-    Row(
-        Modifier.clip(RoundedCornerShape(14.dp)).background(if (selected) accent else Color.White)
-            .border(BorderStroke(1.5.dp, accent), RoundedCornerShape(14.dp)).padding(horizontal = 7.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+fun FavouriteButton(farmId: String, farmName: String, modifier: Modifier = Modifier) {
+    val favourites by LocalLists.favourites.collectAsState()
+    val on = favourites.any { it.farmId == farmId }
+    Box(
+        modifier.size(48.dp).clickable { LocalLists.toggleFavourite(farmId, farmName) }
+            .semantics { contentDescription = if (on) "Remove $farmName from favourite farms" else "Add $farmName to favourite farms" },
+        contentAlignment = Alignment.Center,
     ) {
-        Text(icon, fontSize = 13.sp)
-        Spacer(Modifier.width(3.dp))
-        Text(text, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (selected) Color.White else accent, maxLines = 1)
+        Box(Modifier.size(32.dp).clip(CircleShape).background(Color(0xE6FFFFFF)), contentAlignment = Alignment.Center) {
+            Text(if (on) "♥" else "♡", fontSize = 18.sp, color = if (on) FarmColors.Error else FarmColors.TextMuted)
+        }
     }
 }
 
+/** Stars and count, or "Not rated yet" (search hits and listings carry farmRating / farmRatingCount). */
+@Composable
+fun FarmRatingText(rating: Double?, count: Int, modifier: Modifier = Modifier) {
+    val label = ratingLabel(rating, count)
+    Text(
+        if (rating != null) "${ratingStars(rating)} ${formatRating(rating)} ($count)" else label,
+        fontSize = 12.sp,
+        color = if (rating != null) FarmColors.Warning else FarmColors.TextMuted,
+        fontWeight = if (rating != null) FontWeight.SemiBold else FontWeight.Normal,
+        modifier = modifier.semantics { contentDescription = if (rating != null) "Farm rated ${formatRating(rating)} out of 5 from $count ratings" else label },
+    )
+}
+
+/** The same results as the list, as markers on OpenStreetMap tiles; a tapped marker opens a summary card. */
 @Composable
 fun ProduceMapView(listings: List<ProduceListing>, location: LocationCoords, onOpen: (ProduceListing) -> Unit, onAdded: (ProduceListing) -> Unit) {
     var selectedId by remember { mutableStateOf(listings.firstOrNull()?.id) }
     val selected = listings.find { it.id == selectedId } ?: listings.firstOrNull()
     Column(Modifier.fillMaxSize()) {
-        PinCanvas(
-            center = location, items = listings,
-            coord = { LatLng(it.pickupCoordinates.getOrElse(1) { 0.0 }, it.pickupCoordinates.getOrElse(0) { 0.0 }) },
-            key = { it.id }, selectedKey = selected?.id, onSelect = { selectedId = it.id },
-            pin = { item, sel -> PinBubble(cropEmoji(item.cropId), formatRupees(item.pricePerUnit), sel, if (item.isOrganic && !sel) Color(0xFF15803D) else FarmColors.Primary) },
-            banner = "🗺 Showing ${listings.size} farms within radius of ${location.name}",
-            modifier = Modifier.weight(1f),
+        TileMap(
+            pins = listings.map {
+                MapPin(
+                    it.id, it.pickupCoordinates.getOrElse(1) { 0.0 }, it.pickupCoordinates.getOrElse(0) { 0.0 },
+                    "${it.cropName} · ${formatRupees(it.pricePerUnit)}/${it.unit}", it.farmName,
+                )
+            },
+            centerLat = location.latitude,
+            centerLng = location.longitude,
+            selectedKey = selected?.id,
+            onSelect = { selectedId = it },
+            description = "Map of ${listings.size} listings near ${location.name}",
+            modifier = Modifier.weight(1f).fillMaxWidth(),
         )
         if (selected != null) {
             FarmCard(Modifier.fillMaxWidth().padding(12.dp)) {
@@ -302,7 +284,8 @@ fun ProduceMapView(listings: List<ProduceListing>, location: LocationCoords, onO
                             FText(selected.cropName, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = FarmColors.TextDark)
                             if (selected.isOrganic) Pill("🌱 Organic", FarmColors.PrimaryLight, FarmColors.Primary, Modifier.padding(start = 6.dp))
                         }
-                        FText("🏡 ${selected.farmName} · ${selected.village ?: selected.district}", variant = TextVariant.Label)
+                        FText("🏡 ${selected.farmName}" + placeOf(selected)?.let { " · $it" }.orEmpty(), variant = TextVariant.Label)
+                        FarmRatingText(selected.farmRating, selected.farmRatingCount)
                         FText("📍 ${formatDistance(selected.distanceM)} away  •  ${qtyText(selected.qtyAvailable)} ${selected.unit} left", variant = TextVariant.Caption)
                         VerifiedBadge(selected.photos.firstOrNull(), true, Modifier.padding(top = 6.dp))
                     }
@@ -319,3 +302,7 @@ fun ProduceMapView(listings: List<ProduceListing>, location: LocationCoords, onO
         }
     }
 }
+
+/** "Village, District", whichever parts the catalog returned; null when neither. */
+fun placeOf(listing: ProduceListing): String? =
+    listOfNotNull(listing.village?.takeIf { it.isNotBlank() }, listing.district.takeIf { it.isNotBlank() }).joinToString(", ").ifEmpty { null }

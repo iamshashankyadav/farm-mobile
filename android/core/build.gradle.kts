@@ -12,6 +12,7 @@ android {
 
     defaultConfig {
         minSdk = 26
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_API_BASE_URL", "\"$apiBaseUrl\"")
     }
 
@@ -39,8 +40,14 @@ dependencies {
     api(libs.okhttp)
     api(libs.kotlinx.serialization.json)
     api(libs.coil.compose)
+    api(libs.osmdroid.android)
 
     testImplementation(libs.junit)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     testImplementation(libs.mockwebserver)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

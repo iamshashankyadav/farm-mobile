@@ -1,5 +1,37 @@
 package com.farm.delivery.ui
 
+import java.time.LocalDate
+
+import com.farm.delivery.route.pastDays
+
+import com.farm.delivery.route.dayLabel
+
+import com.farm.core.ui.ScreenTitle
+
+import com.farm.core.ui.ProfileScreen
+
+import androidx.compose.runtime.remember
+
+import androidx.compose.runtime.setValue
+
+import androidx.compose.runtime.mutableStateOf
+
+import androidx.compose.runtime.saveable.rememberSaveable
+
+import androidx.compose.foundation.layout.statusBarsPadding
+
+import androidx.compose.foundation.layout.Box
+
+import androidx.compose.foundation.layout.WindowInsets
+
+import androidx.compose.material3.NavigationBarItemDefaults
+
+import androidx.compose.material3.NavigationBarItem
+
+import androidx.compose.material3.NavigationBar
+
+import androidx.compose.material3.Scaffold
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,17 +69,17 @@ import com.farm.core.ui.Pill
 import com.farm.core.ui.TextVariant
 
 @Composable
-fun DeliveryHomeScreen(onLogin: () -> Unit, onTeam: () -> Unit, onRoute: () -> Unit) {
+fun DeliveryHomeScreen(onLogin: () -> Unit, onTeam: () -> Unit, onRoute: (String?) -> Unit) {
     val auth by AuthManager.state.collectAsState()
     if (auth.isLoading) return CenteredLoading()
+    if (auth.isAuthenticated && auth.hasRole("delivery")) return PartnerTabs(onLogin, onTeam, onRoute)
 
     Column(
         Modifier.fillMaxSize().background(FarmColors.Background).systemBarsPadding().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        val user = auth.user
-        if (!auth.isAuthenticated || user == null || !auth.hasRole("delivery")) {
+        run {
             FarmCard(Modifier.fillMaxWidth().widthIn(max = 400.dp)) {
                 FText("🚚 Farm Delivery", variant = TextVariant.H1)
                 FText(
@@ -60,39 +92,59 @@ fun DeliveryHomeScreen(onLogin: () -> Unit, onTeam: () -> Unit, onRoute: () -> U
             return@Column
         }
 
-        FarmCard(Modifier.fillMaxWidth().widthIn(max = 400.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("🚚", fontSize = 36.sp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    FText(user.name.ifEmpty { "Delivery Partner" }, variant = TextVariant.H2)
-                    FText(user.phone, variant = TextVariant.Caption)
+    }
+}
+
+private enum class PartnerTab { ROUTE, HISTORY, PROFILE }
+
+/** Signed-in partner: bottom bar with today's Route, History (earlier days) and Profile. */
+@Composable
+private fun PartnerTabs(onLogin: () -> Unit, onTeam: () -> Unit, onRoute: (String?) -> Unit) {
+    var tab by rememberSaveable { mutableStateOf(PartnerTab.ROUTE) }
+    Scaffold(
+        containerColor = FarmColors.Background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        bottomBar = {
+            NavigationBar(containerColor = FarmColors.Surface, tonalElevation = 0.dp) {
+                listOf(PartnerTab.ROUTE to ("🗺️" to "Route"), PartnerTab.HISTORY to ("🕘" to "History"), PartnerTab.PROFILE to ("👤" to "Profile"))
+                    .forEach { (t, item) ->
+                        NavigationBarItem(
+                            selected = tab == t, onClick = { tab = t },
+                            icon = { Text(item.first, fontSize = 20.sp) },
+                            label = { Text(item.second, fontSize = 12.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedTextColor = FarmColors.Primary, unselectedTextColor = FarmColors.TextMuted, indicatorColor = FarmColors.PrimaryLight,
+                            ),
+                        )
+                    }
+            }
+        },
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            when (tab) {
+                PartnerTab.ROUTE -> RouteScreen(dateParam = null, onBack = null, onHome = { tab = PartnerTab.ROUTE })
+                PartnerTab.HISTORY -> HistoryTab(onRoute)
+                PartnerTab.PROFILE -> ProfileScreen("Farm delivery partner", onLogin = onLogin, onTeam = onTeam)
+            }
+        }
+    }
+}
+
+/** The last seven days; each opens that day's route (GET /logistics/my-route?pool_date=). */
+@Composable
+private fun HistoryTab(onRoute: (String?) -> Unit) {
+    val days = remember { pastDays(LocalDate.now(), 7) }
+    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())) {
+        ScreenTitle("History", "Routes from the last week")
+        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            days.forEach { d ->
+                FarmCard(Modifier.fillMaxWidth(), onClick = { onRoute(d.toString()) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        FText(dayLabel(d, LocalDate.now()), variant = TextVariant.H2, modifier = Modifier.weight(1f))
+                        Text("›", fontSize = 22.sp, color = FarmColors.TextMuted)
+                    }
                 }
             }
-            Pill("Active Delivery Partner", Color(0xFFE3F2FD), Color(0xFF1565C0), Modifier.padding(vertical = 10.dp), fontSize = 12)
-
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFFFAFAFA))
-                    .border(1.dp, Color(0xFFEEEEEE), RoundedCornerShape(8.dp)).padding(12.dp),
-            ) {
-                FText("Partner Details", variant = TextVariant.Label)
-                FText("Roles: ${user.roles.joinToString(", ")}", modifier = Modifier.padding(top = 2.dp))
-                FText("Partner ID: ${user.id}", variant = TextVariant.Caption, modifier = Modifier.padding(top = 2.dp))
-            }
-
-            Column(
-                Modifier.fillMaxWidth().padding(top = 16.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFF0F4F8))
-                    .border(BorderStroke(1.dp, Color(0xFFD0DCE8)), RoundedCornerShape(8.dp)).padding(12.dp),
-            ) {
-                FText("Today's Route", variant = TextVariant.H2, fontSize = 16.sp)
-                FText("• Pickups first, then drops — ordered by proximity", variant = TextVariant.Caption, modifier = Modifier.padding(top = 4.dp))
-                FText("• Tap \"Navigate\" on each stop to open Google Maps", variant = TextVariant.Caption, modifier = Modifier.padding(top = 2.dp))
-                FText("• OTP displayed for contactless drop confirmation", variant = TextVariant.Caption, modifier = Modifier.padding(top = 2.dp))
-            }
-
-            FarmButton("🗺️  View Today's Route", onRoute, Modifier.fillMaxWidth().padding(top = 16.dp))
-            FarmButton("👥  Meet the Team", onTeam, Modifier.fillMaxWidth().padding(top = 10.dp), variant = ButtonVariant.Secondary)
-            FarmButton("Log Out", { AuthManager.logout() }, Modifier.fillMaxWidth().padding(top = 10.dp), variant = ButtonVariant.Ghost)
         }
     }
 }

@@ -1,5 +1,15 @@
 package com.farm.customer.ui
 
+import com.farm.core.ui.StatusChip
+
+import com.farm.customer.checkout.CartStore
+
+import com.farm.customer.orders.reorder
+
+import com.farm.customer.orders.orderNextStep
+
+import com.farm.customer.orders.canReorder
+
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
@@ -151,14 +161,14 @@ private fun RequireCustomer(message: String, onHome: () -> Unit, content: @Compo
 @Composable
 private fun StatusBadge(status: String) {
     val m = statusMeta(status)
-    Pill("${m.emoji} ${m.label}", hex(m.bg), hex(m.color), fontSize = 12)
+    StatusChip(m.label, hex(m.color))
 }
 
 // ─── Orders list ────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OrdersScreen(onBack: () -> Unit, onHome: () -> Unit, onOrder: (String) -> Unit, onNotifications: () -> Unit) =
+fun OrdersScreen(onBack: (() -> Unit)?, onHome: () -> Unit, onOrder: (String) -> Unit, onNotifications: () -> Unit) =
     RequireCustomer("Please log in as a customer to view orders.", onHome) {
         val scope = rememberCoroutineScope()
         var orders by remember { mutableStateOf<List<OrderSummary>>(emptyList()) }
@@ -245,7 +255,7 @@ fun OrdersScreen(onBack: () -> Unit, onHome: () -> Unit, onOrder: (String) -> Un
                             }
                         }, Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary, enabled = !loadingMore)
                     }
-                    moreError?.let { item { FText(it, variant = TextVariant.Caption, color = Color(0xFFC62828)) } }
+                    moreError?.let { item { FText(it, variant = TextVariant.Caption, color = FarmColors.Error) } }
                 }
             }
         }
@@ -277,10 +287,11 @@ private fun OrderCard(order: OrderSummary, onClick: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StatusBadge(order.status)
                 Spacer(Modifier.weight(1f))
-                Text("›", fontSize = 22.sp, color = Color(0xFFBBBBBB))
+                Text("›", fontSize = 22.sp, color = FarmColors.InputBorder)
             }
         } else {
             StatusRail(railStage(order.status), stageText(order.status))
+            orderNextStep(order.status)?.let { FText(it, variant = TextVariant.Caption, modifier = Modifier.padding(top = 2.dp)) }
         }
     }
 }
@@ -314,7 +325,7 @@ private fun rememberOrder(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, onTrack: (String) -> Unit) =
+fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, onTrack: (String) -> Unit, onCart: () -> Unit) =
     RequireCustomer("Access denied.", onHome) {
         val scope = rememberCoroutineScope()
         var reload by remember { mutableIntStateOf(0) }
@@ -322,6 +333,7 @@ fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, o
         var confirmCancel by remember { mutableStateOf(false) }
         var cancelling by remember { mutableStateOf(false) }
         var cancelError by remember { mutableStateOf<String?>(null) }
+        var reordering by remember { mutableStateOf(false) }
         // Refresh every 15 s while the order can still change, so packing on the website or a
         // pickup by the partner shows up without leaving the screen.
         val (order, error, loaded) = rememberOrder(orderId, reload, onLoaded = { refreshing = false }) {
@@ -352,7 +364,7 @@ fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, o
                 onDismissRequest = { confirmCancel = false },
                 title = { Text("Cancel this order?") },
                 text = { Text("The farmer will not pack it and your payment is refunded.") },
-                confirmButton = { TextButton(::cancel) { Text("Cancel order", color = Color(0xFFC2412D)) } },
+                confirmButton = { TextButton(::cancel) { Text("Cancel order", color = FarmColors.Error) } },
                 dismissButton = { TextButton({ confirmCancel = false }) { Text("Keep it") } },
             )
         }
@@ -384,14 +396,15 @@ fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, o
                             Text(rupees(order.total), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = FarmColors.Primary)
                         }
                         if (order.status != "CANCELLED") StatusRail(stage, stageText(order.status), Modifier.padding(top = 12.dp))
+                        orderNextStep(order.status)?.let { FText(it, variant = TextVariant.Caption, color = FarmColors.TextLabel, modifier = Modifier.padding(top = 4.dp)) }
                         Column(Modifier.padding(top = 10.dp)) {
                             order.items.forEach { LineRow("${it.name}  ×${qtyText(it.qty)} ${it.unit}", rupees(it.lineTotal)) }
                             if (order.deliveryFee > 0) LineRow("Delivery", rupees(order.deliveryFee))
-                            HorizontalDivider(Modifier.padding(vertical = 6.dp), color = Color(0xFFEEEEEE))
+                            HorizontalDivider(Modifier.padding(vertical = 6.dp), color = FarmColors.Border)
                             Row { FText("Total", variant = TextVariant.Label, modifier = Modifier.weight(1f)); FText(rupees(order.total), variant = TextVariant.Label, color = FarmColors.Primary) }
                         }
                         addressLabel(order.deliveryAddress)?.let {
-                            Column(Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFFAFAFA)).padding(10.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(FarmColors.Background).padding(10.dp)) {
                                 FText("Delivery Address", variant = TextVariant.Label)
                                 FText("📍 $it", variant = TextVariant.Caption, color = FarmColors.TextLabel)
                             }
@@ -401,7 +414,7 @@ fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, o
                     FarmCard(Modifier.fillMaxWidth()) {
                         if (order.status == "CANCELLED") {
                             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                                FText("Cancelled", variant = TextVariant.H2, color = Color(0xFFC2412D))
+                                FText("Cancelled", variant = TextVariant.H2, color = FarmColors.Error)
                                 val refunded = order.payments.filter { it.kind == "REFUND" && it.status == "SUCCEEDED" }.sumOf { it.amount }
                                 FText(
                                     if (refunded > 0) "This order was cancelled. ${rupees(refunded)} was refunded to you."
@@ -424,8 +437,24 @@ fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, o
                         canRate(order.status, order.rating != null) -> FarmButton("Rate this order", { onTrack(order.id) }, Modifier.fillMaxWidth())
                         else -> FarmButton("Track delivery", { onTrack(order.id) }, Modifier.fillMaxWidth())
                     }
+                    if (canReorder(order.orderType, order.items)) {
+                        FarmButton(
+                            if (reordering) "Checking today's stock…" else "Order again",
+                            {
+                                reordering = true
+                                scope.launch {
+                                    val result = reorder(order.items)
+                                    result.added.forEach(CartStore::add)
+                                    CartStore.notice = result.message
+                                    reordering = false
+                                    onCart()
+                                }
+                            },
+                            Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary, enabled = !reordering,
+                        )
+                    }
                     if (canCancel(order.status)) {
-                        cancelError?.let { Text(it, color = Color(0xFFC2412D), fontSize = 13.sp) }
+                        cancelError?.let { Text(it, color = FarmColors.Error, fontSize = 13.sp) }
                         FarmButton(
                             if (cancelling) "Cancelling…" else "Cancel order", { confirmCancel = true },
                             Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary, enabled = !cancelling,
@@ -439,8 +468,8 @@ fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, o
 @Composable
 private fun LineRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        FText(label, variant = TextVariant.Caption, color = Color(0xFF444444), modifier = Modifier.weight(1f))
-        FText(value, variant = TextVariant.Caption, color = Color(0xFF444444))
+        FText(label, variant = TextVariant.Caption, color = FarmColors.TextBody, modifier = Modifier.weight(1f))
+        FText(value, variant = TextVariant.Caption, color = FarmColors.TextBody)
     }
 }
 
@@ -494,13 +523,13 @@ fun NotificationsScreen(
 
         Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
             ScreenHeader(if (unread > 0) "Notifications ($unread)" else "Notifications", onBack) {
-                if (unread > 0) Text("Mark all read", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { markRead(null) }.padding(12.dp))
+                if (unread > 0) Text("Mark all read", color = FarmColors.Primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { markRead(null) }.padding(12.dp))
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Chip("All", !unreadOnly, { if (unreadOnly) { unreadOnly = false; loaded = false } })
                 Chip("Unread only", unreadOnly, { if (!unreadOnly) { unreadOnly = true; loaded = false } })
             }
-            actionError?.let { FText(it, variant = TextVariant.Caption, color = Color(0xFFC2412D), modifier = Modifier.padding(horizontal = 16.dp)) }
+            actionError?.let { FText(it, variant = TextVariant.Caption, color = FarmColors.Error, modifier = Modifier.padding(horizontal = 16.dp)) }
             PullToRefreshBox(refreshing, { refreshing = true; reload++ }, Modifier.fillMaxSize()) {
                 LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     when {
@@ -532,8 +561,8 @@ fun NotificationsScreen(
                             }
                             FarmCard(
                                 Modifier.fillMaxWidth(),
-                                background = if (isUnread) Color(0xFFF1F8F4) else Color.White,
-                                border = if (isUnread) BorderStroke(1.dp, Color(0xFFC8E6C9)) else null,
+                                background = if (isUnread) FarmColors.PrimaryLight else Color.White,
+                                border = if (isUnread) BorderStroke(1.dp, FarmColors.PrimaryLight) else null,
                                 onClick = { if (isUnread) markRead(n.id); target?.invoke() },
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -544,10 +573,10 @@ fun NotificationsScreen(
                                             fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Normal,
                                             color = if (isUnread) FarmColors.TextDark else FarmColors.TextLabel,
                                         )
-                                        FText(n.body, variant = TextVariant.Caption, color = Color(0xFF555555))
+                                        FText(n.body, variant = TextVariant.Caption, color = FarmColors.TextMuted)
                                         FText((if (isUnread) "Unread · " else "") + timeAgo(n.createdAt), variant = TextVariant.Caption, fontSize = 11.sp)
                                     }
-                                    if (target != null) Text("›", fontSize = 22.sp, color = Color(0xFFBBBBBB))
+                                    if (target != null) Text("›", fontSize = 22.sp, color = FarmColors.InputBorder)
                                 }
                             }
                         }
@@ -613,7 +642,7 @@ fun TrackingScreen(orderId: String, onBack: () -> Unit, onOrders: () -> Unit) {
             val dropStop = t?.stop
             val otp = dropStop?.otp
             if (live && dropStop != null && otp != null && !dropStop.otpVerified) {
-                FarmCard(Modifier.fillMaxWidth(), background = Color(0xFFF1F8F4), border = BorderStroke(1.dp, Color(0xFFC8E6C9))) {
+                FarmCard(Modifier.fillMaxWidth(), background = FarmColors.PrimaryLight, border = BorderStroke(1.dp, FarmColors.PrimaryLight)) {
                     FText("Your delivery code", variant = TextVariant.Label)
                     Text(
                         otp, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = 6.sp, color = FarmColors.PrimaryDark,
@@ -662,7 +691,7 @@ fun TrackingScreen(orderId: String, onBack: () -> Unit, onOrders: () -> Unit) {
 private fun TrackingMap(partner: LatLng?, drop: LatLng?, pickup: LatLng?) {
     val points = listOfNotNull(pickup?.let { "pickup" to it }, drop?.let { "drop" to it }, partner?.let { "partner" to it })
     val glyph = mapOf("pickup" to "🌾", "drop" to "🏠", "partner" to "🛵")
-    BoxWithConstraints(Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFFE8F3EC))) {
+    BoxWithConstraints(Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(12.dp)).background(FarmColors.PrimaryLight)) {
         val density = LocalDensity.current
         val w = with(density) { maxWidth.toPx() }
         val h = with(density) { maxHeight.toPx() }
@@ -695,14 +724,14 @@ private fun RatingForm(orderId: String, onRated: () -> Unit) {
         FText("How was your delivery?", variant = TextVariant.H2, fontSize = 18.sp)
         Row(Modifier.padding(vertical = 8.dp)) {
             (1..5).forEach { n ->
-                Text("★", fontSize = 34.sp, color = if (n <= score) Color(0xFFF59E0B) else Color(0xFFD1D5DB), modifier = Modifier.clickable { score = n }.padding(end = 6.dp))
+                Text("★", fontSize = 34.sp, color = if (n <= score) FarmColors.Warning else FarmColors.InputBorder, modifier = Modifier.clickable { score = n }.padding(end = 6.dp))
             }
         }
         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).border(1.dp, FarmColors.Border, RoundedCornerShape(8.dp)).padding(10.dp)) {
-            if (comment.isEmpty()) Text("Add a comment (optional)", color = Color(0xFF999999), fontSize = 14.sp)
+            if (comment.isEmpty()) Text("Add a comment (optional)", color = FarmColors.TextMuted, fontSize = 14.sp)
             BasicTextField(comment, { comment = it.take(500) }, minLines = 2, textStyle = TextStyle(fontSize = 14.sp), modifier = Modifier.fillMaxWidth())
         }
-        message?.let { Text(it, color = Color(0xFFC62828), fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
+        message?.let { Text(it, color = FarmColors.Error, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
         FarmButton(if (busy) "Saving…" else "Submit rating", {
             if (score == 0) { message = "Pick 1 to 5 stars."; return@FarmButton }
             busy = true; message = null
@@ -843,7 +872,7 @@ fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { dates.forEach { d -> Chip(d.substring(5), d == date, { date = d }) } }
                     }
                 }
-                message?.let { Text(it, color = Color(0xFFC62828), fontSize = 13.sp) }
+                message?.let { Text(it, color = FarmColors.Error, fontSize = 13.sp) }
                 FarmButton(
                     if (busy) "Saving…" else if (option == "BUYBACK") "Sell it back" else "Confirm delivery",
                     ::confirm, Modifier.fillMaxWidth(), loading = busy, enabled = option != null && !busy,
@@ -854,7 +883,7 @@ fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -
                 FarmButton("Open the order", { onOrder(o.id) }, Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary)
             }
             if (o != null && summary != null && stage == HarvestStage.COMPLETED && o.harvestOption == "BUYBACK") {
-                FarmCard(Modifier.fillMaxWidth(), background = Color(0xFFF1F8F4), border = BorderStroke(1.dp, Color(0xFFC8E6C9))) {
+                FarmCard(Modifier.fillMaxWidth(), background = FarmColors.PrimaryLight, border = BorderStroke(1.dp, FarmColors.PrimaryLight)) {
                     FText("Credited ${formatRupees(summary.credit)}", variant = TextVariant.H2)
                     FText("The farmer bought your harvest back. The credit is recorded on the order.", variant = TextVariant.Caption)
                 }
@@ -872,8 +901,8 @@ fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -
 private fun OptionCard(selected: Boolean, title: String, text: String, onClick: () -> Unit) {
     FarmCard(
         Modifier.fillMaxWidth(), onClick = onClick,
-        background = if (selected) Color(0xFFF0FDF4) else Color.White,
-        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) FarmColors.Primary else Color(0xFFE5E7EB)),
+        background = if (selected) FarmColors.PrimaryLight else Color.White,
+        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) FarmColors.Primary else FarmColors.Border),
     ) {
         FText(title, variant = TextVariant.Label, fontSize = 15.sp)
         FText(text, variant = TextVariant.Caption)
