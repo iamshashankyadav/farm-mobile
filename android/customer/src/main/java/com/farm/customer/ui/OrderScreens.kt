@@ -69,6 +69,7 @@ import com.farm.core.api.OrderApi
 import com.farm.core.api.OrderDetail
 import com.farm.core.api.OrderRatingCreate
 import com.farm.core.api.OrderSummary
+import com.farm.core.api.LandApi
 import com.farm.core.api.LogisticsApi
 import com.farm.core.api.Track
 import com.farm.core.auth.AuthManager
@@ -106,6 +107,7 @@ import com.farm.customer.notifications.markReadLocally
 import com.farm.customer.notifications.newestFirst
 import com.farm.customer.notifications.notificationTarget
 import com.farm.customer.orders.itemsLabel
+import com.farm.customer.reservation.showHarvestChoice
 import com.farm.customer.orders.load
 import com.farm.customer.orders.loadErrorMessage
 import com.farm.customer.orders.orderTitle
@@ -721,10 +723,17 @@ private suspend fun findHarvestOrder(reservationId: String): OrderDetail? {
     return null
 }
 
+/**
+ * Delivery or buy-back for a harvest that passed its quality check (#43). The choice is offered
+ * only while land shows the reservation as FULFILLING and the harvest order has no option yet.
+ * DELIVERY then follows the normal order, tracking and rating screens; BUYBACK shows the credit.
+ */
 @Composable
-fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -> Unit) {
+fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -> Unit, onOrder: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     var order by remember { mutableStateOf<OrderDetail?>(null) }
+    var reservationStatus by remember { mutableStateOf<String?>(null) }
+    var loadError by remember { mutableStateOf<String?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var reload by remember { mutableIntStateOf(0) }
     var option by remember { mutableStateOf<String?>(null) }
@@ -737,7 +746,11 @@ fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -
 
     LaunchedEffect(reservationId, reload) {
         while (true) {
-            runCatching { findHarvestOrder(reservationId) }.onSuccess { order = it }
+            load { LandApi.getMyReservations().find { it.id == reservationId }?.status }
+                .onSuccess { reservationStatus = it }
+            load { findHarvestOrder(reservationId) }
+                .onSuccess { order = it; loadError = null }
+                .onFailure { loadError = loadErrorMessage(it) }
             loaded = true
             if (!shouldPollHarvest(harvestStageOf(order?.status, order?.harvestOption))) break
             delay(15_000)
@@ -747,9 +760,11 @@ fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -
     val o = order
     val stage = harvestStageOf(o?.status, o?.harvestOption)
     val summary = o?.let { summarise(it.subtotal, it.deliveryFee, it.balanceDue, it.payments) }
+    val choosing = showHarvestChoice(reservationStatus, stage)
 
     fun confirm() {
         val opt = option ?: return
+        if (busy) return // one request at a time; the server also answers a repeat with the same order
         var address: com.farm.core.api.DeliveryAddress? = null
         if (opt == "DELIVERY") {
             when (val r = validateAddress(form)) {
@@ -759,16 +774,17 @@ fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -
         }
         busy = true; message = null
         scope.launch {
-            try {
-                val res = OrderApi.chooseHarvest(HarvestOrderChoice(reservationId, opt, address, if (opt == "DELIVERY") date else null))
-                if (res.ok) order = res.decode<OrderDetail>() else {
-                    val err = parseChoiceError(res.status, res.error()?.code)
-                    message = err.message
-                    if (err.refresh) reload++
+            load { OrderApi.chooseHarvest(HarvestOrderChoice(reservationId, opt, address, if (opt == "DELIVERY") date else null)) }
+                .onSuccess { res ->
+                    if (res.ok) {
+                        load { res.decode<OrderDetail>() }.onSuccess { order = it }.onFailure { reload++ }
+                    } else {
+                        val err = parseChoiceError(res.status, res.error()?.code)
+                        message = err.message
+                        if (err.refresh) reload++
+                    }
                 }
-            } catch (_: NetworkException) {
-                message = "No connection. Check your network and try again."
-            }
+                .onFailure { message = loadErrorMessage(it) }
             busy = false
         }
     }
@@ -776,7 +792,18 @@ fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -
     Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
         ScreenHeader("Your harvest", onBack)
         Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            FText(stage.text, color = FarmColors.TextLabel)
+            if (o == null && loadError != null) {
+                FarmCard(Modifier.fillMaxWidth()) {
+                    FText("Could not load your harvest", variant = TextVariant.H2, fontSize = 18.sp)
+                    FText(loadError ?: "", variant = TextVariant.Caption)
+                    FarmButton("Try again", { reload++ }, Modifier.padding(top = 8.dp))
+                }
+            } else {
+                FText(
+                    if (stage == HarvestStage.CHOOSE && !choosing) "Your harvest passed its check. Getting your options ready…" else stage.text,
+                    color = FarmColors.TextLabel,
+                )
+            }
             if (o != null && summary != null) {
                 FarmCard(Modifier.fillMaxWidth()) {
                     LineRow("Harvest value", formatRupees(summary.value))
@@ -786,9 +813,9 @@ fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -
                     if (summary.balanceDue > 0) Row { FText("Balance due on delivery", variant = TextVariant.Label, modifier = Modifier.weight(1f)); FText(formatRupees(summary.balanceDue), variant = TextVariant.Label) }
                 }
             }
-            if (stage == HarvestStage.CHOOSE) {
-                OptionCard(option == "DELIVERY", "🚚  Deliver it to me", "Pooled doorstep delivery. The balance is paid when it arrives.") { option = "DELIVERY" }
-                OptionCard(option == "BUYBACK", "💰  Buy-back", "The farmer buys your harvest and credits you. Nothing is delivered.") { option = "BUYBACK" }
+            if (choosing) {
+                OptionCard(option == "DELIVERY", "🚚  Deliver it to me", "Pooled doorstep delivery. The balance is paid when it arrives.") { option = "DELIVERY"; message = null }
+                OptionCard(option == "BUYBACK", "💰  Buy-back", "The farmer buys your harvest back and credits you 90% of its value at once. Nothing is delivered.") { option = "BUYBACK"; message = null }
                 if (option == "DELIVERY") {
                     FarmCard(Modifier.fillMaxWidth()) {
                         FText("Delivery address", variant = TextVariant.Label)
@@ -797,6 +824,8 @@ fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -
                         FarmInput(form.city, { form = form.copy(city = it) }, placeholder = "City", error = errors["city"])
                         FarmInput(form.pincode, { form = form.copy(pincode = it) }, placeholder = "Pincode", error = errors["pincode"], maxLength = 6)
                         FarmInput(form.contactPhone, { form = form.copy(contactPhone = it) }, placeholder = "Phone (optional)", error = errors["contactPhone"])
+                        FarmInput(form.lat, { form = form.copy(lat = it) }, placeholder = "Latitude", error = errors["lat"])
+                        FarmInput(form.lng, { form = form.copy(lng = it) }, placeholder = "Longitude", error = errors["lng"])
                         FText("Delivery date", variant = TextVariant.Label, modifier = Modifier.padding(top = 8.dp, bottom = 6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { dates.forEach { d -> Chip(d.substring(5), d == date, { date = d }) } }
                     }
@@ -804,19 +833,23 @@ fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -
                 message?.let { Text(it, color = Color(0xFFC62828), fontSize = 13.sp) }
                 FarmButton(
                     if (busy) "Saving…" else if (option == "BUYBACK") "Sell it back" else "Confirm delivery",
-                    ::confirm, Modifier.fillMaxWidth(), enabled = option != null && !busy,
+                    ::confirm, Modifier.fillMaxWidth(), loading = busy, enabled = option != null && !busy,
                 )
             }
-            if (o != null && (stage == HarvestStage.DELIVERY || (stage == HarvestStage.COMPLETED && o.harvestOption == "DELIVERY"))) {
+            if (o != null && o.harvestOption == "DELIVERY" && stage != HarvestStage.CANCELLED) {
                 FarmButton("Track delivery", { onTrack(o.id) }, Modifier.fillMaxWidth())
+                FarmButton("Open the order", { onOrder(o.id) }, Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary)
             }
-            if (stage == HarvestStage.COMPLETED && summary != null && summary.credit > 0 && o?.harvestOption == "BUYBACK") {
-                FarmCard(Modifier.fillMaxWidth()) {
+            if (o != null && summary != null && stage == HarvestStage.COMPLETED && o.harvestOption == "BUYBACK") {
+                FarmCard(Modifier.fillMaxWidth(), background = Color(0xFFF1F8F4), border = BorderStroke(1.dp, Color(0xFFC8E6C9))) {
                     FText("Credited ${formatRupees(summary.credit)}", variant = TextVariant.H2)
-                    FText("The farmer bought your harvest back.", variant = TextVariant.Caption)
+                    FText("The farmer bought your harvest back. The credit is recorded on the order.", variant = TextVariant.Caption)
                 }
+                FarmButton("Open the order", { onOrder(o.id) }, Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary)
             }
-            if (stage == HarvestStage.NOT_READY) FText("This page refreshes by itself.", variant = TextVariant.Caption)
+            if (stage == HarvestStage.NOT_READY || (stage == HarvestStage.CHOOSE && !choosing)) {
+                FText("This page refreshes by itself.", variant = TextVariant.Caption)
+            }
             FarmButton("Back", onBack, Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary)
         }
     }

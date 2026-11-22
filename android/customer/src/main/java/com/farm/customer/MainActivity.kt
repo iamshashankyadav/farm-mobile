@@ -134,6 +134,7 @@ private fun CustomerNav() {
                 e.arguments?.getString("reservationId").orEmpty(),
                 onBack = { nav.popBackStack() },
                 onTrack = { nav.navigate("tracking/$it") },
+                onOrder = { nav.navigate("order/$it") },
             )
         }
     }

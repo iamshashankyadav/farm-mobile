@@ -1,5 +1,6 @@
 package com.farm.customer.reservation
 
+import com.farm.customer.orders.HarvestStage
 import com.farm.customer.orders.parseInstant
 import java.time.Duration
 import java.time.Instant
@@ -47,6 +48,13 @@ fun canPayDeposit(status: String, deposit: Double?): Boolean = status == "ACCEPT
 
 /** The harvest choice is offered only while the reservation is FULFILLING (#43). */
 fun canChooseHarvest(status: String): Boolean = status == "FULFILLING"
+
+/**
+ * Show the DELIVERY / BUYBACK choice only when land says FULFILLING and the harvest order exists
+ * without an option. The two services catch up through events, so one can be a few seconds ahead.
+ */
+fun showHarvestChoice(reservationStatus: String?, stage: HarvestStage): Boolean =
+    reservationStatus != null && canChooseHarvest(reservationStatus) && stage == HarvestStage.CHOOSE
 
 /** Message for a refused deposit payment (POST /order/orders/payments/intent, kind DEPOSIT). */
 fun depositErrorMessage(status: Int, code: String?, serverMessage: String?): String = when {
