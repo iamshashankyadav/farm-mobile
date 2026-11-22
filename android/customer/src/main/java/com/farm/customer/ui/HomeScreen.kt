@@ -1,5 +1,9 @@
 package com.farm.customer.ui
 
+import com.farm.customer.browse.clampRadius
+
+import com.farm.customer.browse.cropEmoji
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -60,10 +64,6 @@ import com.farm.customer.land.SEASON_NAMES
 import com.farm.customer.checkout.CartStore
 import com.farm.customer.land.LandFilterState
 
-private val CROPS = listOf(
-    "ALL" to "🌱 All", "tomato" to "🍅 Tomato", "spinach" to "🥬 Spinach", "onion" to "🧅 Onion",
-    "potato" to "🥔 Potato", "okra" to "🌿 Okra", "carrot" to "🥕 Carrot", "mango" to "🥭 Mango",
-)
 // The land service names its seasons Kharif, Rabi and Zaid; the chip filters on the server.
 private val SEASONS = listOf("ALL" to "All Seasons") + SEASON_NAMES.map { it to it }
 
@@ -235,8 +235,9 @@ private fun ProduceTab(vm: HomeViewModel, nav: HomeNav, onFilter: () -> Unit) {
             SmallAction(if (vm.produceMap) "📋 List" else "🗺 Map") { vm.produceMap = !vm.produceMap }
         }
         ChipRow {
-            CROPS.forEach { (id, label) ->
-                Chip(label, (id == "ALL" && vm.filters.crop == null) || vm.filters.crop == id, { vm.toggleCrop(if (id == "ALL") null else id) })
+            Chip("🌱 All", vm.filters.crop == null, { vm.toggleCrop(null) })
+            vm.crops.forEach { crop ->
+                Chip("${cropEmoji(crop.id)} ${crop.name.ifBlank { crop.id }}", vm.filters.crop == crop.id, { vm.toggleCrop(crop.id) })
             }
         }
         vm.produceToast?.let {
@@ -246,7 +247,7 @@ private fun ProduceTab(vm: HomeViewModel, nav: HomeNav, onFilter: () -> Unit) {
         }
         val listings = vm.listings
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            FText("${listings.size} ${if (listings.size == 1) "listing" else "listings"} within ${vm.filters.radiusKm} km", variant = TextVariant.Caption, modifier = Modifier.weight(1f))
+            FText("${listings.size}${if (vm.produceNextCursor != null) "+" else ""} ${if (listings.size == 1) "listing" else "listings"} within ${clampRadius(vm.filters.radiusKm)} km", variant = TextVariant.Caption, modifier = Modifier.weight(1f))
             Text("🔄 Refresh", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FarmColors.Primary, modifier = Modifier.clickable { vm.refreshProduce() }.padding(4.dp))
         }
         when {
@@ -258,6 +259,18 @@ private fun ProduceTab(vm: HomeViewModel, nav: HomeNav, onFilter: () -> Unit) {
                 Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 items(listings, key = { it.id }) { item -> ListingCard(item, onOpen = { nav.listing(item.id) }, onAdded = vm::onAddedToCart) }
+                if (vm.produceNextCursor != null) {
+                    item {
+                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                            vm.produceMoreError?.let { FText(loadErrorMessage(it), variant = TextVariant.Caption, modifier = Modifier.padding(bottom = 6.dp)) }
+                            FarmButton(
+                                if (vm.loadingMoreProduce) "Loading…" else if (vm.produceMoreError != null) "Retry" else "Load more",
+                                vm::loadMoreProduce,
+                                variant = ButtonVariant.Secondary,
+                            )
+                        }
+                    }
+                }
                 item { Spacer(Modifier.navigationBarsPadding()) }
             }
         }

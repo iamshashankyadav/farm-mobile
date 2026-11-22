@@ -45,6 +45,13 @@ object CatalogApi {
         return res.decode()
     }
 
+    /** The crop catalogue (GET /catalog/crops): stable ids such as "tomato" and display names. */
+    suspend fun listCrops(): List<CropOut> {
+        val res = Http.get("/catalog/crops")
+        if (!res.ok) throw apiError(res, "Could not load the crops")
+        return res.decode()
+    }
+
     suspend fun getMedia(mediaId: String): MediaOut {
         val res = Http.get("/media/${Http.enc(mediaId)}")
         if (!res.ok) throw apiError(res, "Could not load the photo")

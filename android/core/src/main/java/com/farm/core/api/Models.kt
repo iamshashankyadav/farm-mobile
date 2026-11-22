@@ -84,6 +84,9 @@ data class ListingSearchProperties(
     val village: String? = null,
     val status: String = "ACTIVE",
     val mediaIds: List<String> = emptyList(),
+    /** The farm's average score, 1 to 5; null until it has been rated. */
+    val farmRating: Double? = null,
+    val farmRatingCount: Int = 0,
     val createdAt: String = "",
     val updatedAt: String = "",
 )
@@ -92,7 +95,7 @@ data class ListingSearchProperties(
 data class ListingFeature(val geometry: GeoPoint? = null, val properties: ListingSearchProperties)
 
 @Serializable
-data class ListingFeatureCollection(val features: List<ListingFeature> = emptyList(), val cursor: String? = null)
+data class ListingFeatureCollection(val features: List<ListingFeature> = emptyList(), val nextCursor: String? = null)
 
 @Serializable
 data class ListingOut(
@@ -115,7 +118,12 @@ data class ListingOut(
     val pickupLocation: GeoPoint? = null,
     val status: String = "ACTIVE",
     val mediaIds: List<String> = emptyList(),
+    val farmRating: Double? = null,
+    val farmRatingCount: Int = 0,
 )
+
+@Serializable
+data class CropOut(val id: String, val name: String = "", val category: String = "", val defaultUnit: String = "kg")
 
 @Serializable
 data class MediaOut(

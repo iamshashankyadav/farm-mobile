@@ -1,5 +1,9 @@
 package com.farm.customer.ui
 
+import androidx.compose.foundation.lazy.items
+
+import androidx.compose.foundation.lazy.LazyRow
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -127,14 +131,25 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
             Text("🛒 ${cart.items.size}", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onCart).padding(6.dp))
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Box(Modifier.fillMaxWidth().height(230.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF0FDF4))) {
-                if (photo != null && photo.url.isNotEmpty()) {
-                    AsyncImage(photo.url, l.cropName, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                } else Text("🥕", fontSize = 64.sp, modifier = Modifier.align(Alignment.Center))
-                if (l.isOrganic) Pill("🌱 100% Organic", FarmColors.Primary, Color.White, Modifier.align(Alignment.TopEnd).padding(10.dp), fontSize = 12)
+            if (l.photos.isEmpty()) {
+                Box(Modifier.fillMaxWidth().height(230.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF0FDF4))) {
+                    Text("No photos yet", color = FarmColors.TextMuted, modifier = Modifier.align(Alignment.Center))
+                    if (l.isOrganic) Pill("🌱 Organic", FarmColors.Primary, Color.White, Modifier.align(Alignment.TopEnd).padding(10.dp), fontSize = 12)
+                }
+            } else {
+                // Every photo of the listing, each marked verified on the farm or "Unverified".
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(l.photos, key = { it.id }) { p ->
+                        Box(Modifier.fillParentMaxWidth(if (l.photos.size == 1) 1f else 0.85f).height(230.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF0FDF4))) {
+                            AsyncImage(p.url, "${l.cropName} photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                            VerifiedBadge(p, compact = true, modifier = Modifier.align(Alignment.TopStart).padding(10.dp))
+                            if (l.isOrganic) Pill("🌱 Organic", FarmColors.Primary, Color.White, Modifier.align(Alignment.TopEnd).padding(10.dp), fontSize = 12)
+                        }
+                    }
+                }
             }
             FarmCard(Modifier.fillMaxWidth()) {
-                FText("Produce Photo Verification", variant = TextVariant.Label, modifier = Modifier.padding(bottom = 8.dp))
+                FText("Photo verification", variant = TextVariant.Label, modifier = Modifier.padding(bottom = 8.dp))
                 VerifiedBadge(photo, compact = false)
             }
             FarmCard(Modifier.fillMaxWidth()) {
@@ -160,8 +175,9 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
             FarmCard(Modifier.fillMaxWidth()) {
                 FText("Farm & Origin", variant = TextVariant.H2, fontSize = 18.sp)
                 InfoRow("🏡", "Farm Name", l.farmName)
+                Column(Modifier.padding(start = 34.dp)) { FarmRatingText(l.farmRating, l.farmRatingCount) }
                 l.farmerName?.let { InfoRow("👨‍🌾", "Farmer", it) }
-                InfoRow("📍", "Location & Distance", "${l.village?.let { "$it, " } ?: ""}${l.district} (${formatDistance(l.distanceM)} away)")
+                placeOf(l)?.let { InfoRow("📍", "Village and district", it) }
                 InfoRow("📅", "Harvest Date", formatHarvestDate(l.harvestDate))
             }
             added?.let {

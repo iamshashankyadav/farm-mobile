@@ -39,6 +39,7 @@ dependencies {
     api(libs.okhttp)
     api(libs.kotlinx.serialization.json)
     api(libs.coil.compose)
+    api(libs.osmdroid.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.mockwebserver)

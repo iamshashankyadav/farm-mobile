@@ -35,7 +35,6 @@ android {
 
 dependencies {
     implementation(project(":core"))
-    implementation(libs.osmdroid.android)
     testImplementation(libs.junit)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
