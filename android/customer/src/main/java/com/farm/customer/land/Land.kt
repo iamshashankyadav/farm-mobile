@@ -1,12 +1,10 @@
 package com.farm.customer.land
 
-import android.content.Context
-import com.farm.core.api.Http
 import com.farm.core.api.LandApi
 import com.farm.core.api.ReservationCreate
+import com.farm.core.api.ReservationOut
 import com.farm.customer.browse.haversineM
 import kotlinx.serialization.Serializable
-import java.time.LocalDate
 import kotlin.math.roundToLong
 
 @Serializable
@@ -24,14 +22,16 @@ data class PlotSeasonItem(
 data class PlotItem(
     val id: String,
     val farmerId: String = "",
-    val farmerName: String = "Farmer Partner",
+    /** Not returned by the land API yet; shown only when known. */
+    val farmerName: String = "",
     val farmerPhone: String? = null,
     val title: String,
     val description: String? = null,
     val areaAcres: Double = 0.0,
-    val soilType: String = "Loam",
-    val waterSource: String = "Borewell",
+    val soilType: String? = null,
+    val waterSource: String? = null,
     val status: String = "AVAILABLE",
+    /** Not returned by the plot search yet; shown only when known. */
     val village: String = "",
     val district: String = "",
     val distanceM: Double = 0.0,
@@ -42,25 +42,6 @@ data class PlotItem(
 ) {
     val minPrice: Double? get() = seasons.minOfOrNull { it.pricePerKg }
 }
-
-@Serializable
-data class TimelinePhoto(
-    val id: String,
-    val url: String = "",
-    val thumbUrl: String = "",
-    val isGeoVerified: Boolean = false,
-    val distanceM: Double? = null,
-)
-
-@Serializable
-data class CropTimelineItem(
-    val id: String,
-    val stage: String,
-    val stageTitle: String = "",
-    val note: String? = null,
-    val createdAt: String = "",
-    val photos: List<TimelinePhoto> = emptyList(),
-)
 
 @Serializable
 data class ReservationItem(
@@ -79,7 +60,8 @@ data class ReservationItem(
     val deposit: Double = 0.0,
     val total: Double = 0.0,
     val createdAt: String = "",
-    val updates: List<CropTimelineItem> = emptyList(),
+    /** When a PENDING request lapses if the farmer does not answer. */
+    val expiresAt: String? = null,
 )
 
 enum class LandSortOption { DISTANCE, ACRES_DESC, ACRES_ASC, PRICE_ASC, PRICE_DESC }
@@ -105,7 +87,7 @@ fun filterPlots(plots: List<PlotItem>, f: LandFilterState): List<PlotItem> = plo
     }
     if (f.season != null && f.season != "ALL" && plot.seasons.none { it.season.equals(f.season, true) }) return@filter false
     if (f.crop != null && f.crop != "ALL" && plot.seasons.none { s -> s.allowedCrops.any { it.equals(f.crop, true) } }) return@filter false
-    if (f.soilType != null && f.soilType != "ALL" && !plot.soilType.equals(f.soilType, true)) return@filter false
+    if (f.soilType != null && f.soilType != "ALL" && plot.soilType?.equals(f.soilType, true) != true) return@filter false
     if (f.radiusKm > 0 && plot.distanceM > f.radiusKm * 1000) return@filter false
     if (f.minAcres != null && f.minAcres > 0 && plot.areaAcres < f.minAcres) return@filter false
     if (f.maxAcres != null && f.maxAcres > 0 && plot.areaAcres > f.maxAcres) return@filter false
@@ -128,92 +110,35 @@ fun reservationEstimate(pricePerKg: Double, qtyKg: Double): Pair<Double, Double>
     return r2(total * 0.2) to total
 }
 
-data class StageMeta(val label: String, val icon: String, val color: String, val bg: String, val step: Int)
+/** "wheat" -> "Wheat", "green_chilli" -> "Green chilli". */
+fun cropTitle(cropId: String): String = cropId.replace('_', ' ').trim().lowercase().replaceFirstChar { it.uppercase() }
 
-fun stageMeta(stage: String): StageMeta = when (stage) {
-    "SOWN" -> StageMeta("Sown / Germinating", "🌱", "#15803d", "#dcfce7", 1)
-    "GROWING" -> StageMeta("Vegetative Growth", "🌿", "#0369a1", "#e0f2fe", 2)
-    "FLOWERING" -> StageMeta("Flowering & Fruiting", "🌸", "#b45309", "#fef3c7", 3)
-    "HARVEST_READY" -> StageMeta("Harvest Ready", "🌾", "#7e22ce", "#f3e8ff", 4)
-    else -> StageMeta(stage, "📍", "#475569", "#f1f5f9", 0)
-}
+/** A reservation as the server returned it; [plot] and [season] fill the names when known. */
+fun ReservationOut.toItem(plot: PlotItem? = null, season: PlotSeasonItem? = null): ReservationItem = ReservationItem(
+    id = id, plotId = plot?.id ?: "", plotTitle = plot?.title ?: plotTitle ?: "",
+    plotSeasonId = plotSeasonId, seasonName = season?.season ?: seasonName ?: "",
+    farmerId = farmerId, farmerName = plot?.farmerName ?: "", farmerPhone = plot?.farmerPhone,
+    cropId = cropId, cropName = cropTitle(cropId), expectedQtyKg = expectedQtyKg, status = status,
+    deposit = deposit ?: 0.0, total = total ?: 0.0, createdAt = createdAt ?: "", expiresAt = expiresAt,
+)
 
-val ALL_STAGES = listOf("SOWN", "GROWING", "FLOWERING", "HARVEST_READY")
-
-/** Land service calls with the seed plots / reservations as an offline fallback. */
+/** The land service only. A failed call throws; nothing is invented. */
 object LandRepository {
-    private var seedPlots: List<PlotItem> = emptyList()
-    /** Reservations created in this session (plus the seeds), used when the service is unreachable. */
-    private var localReservations: List<ReservationItem> = emptyList()
-
-    fun init(context: Context) {
-        fun read(name: String) = context.assets.open(name).bufferedReader().readText()
-        seedPlots = runCatching { Http.json.decodeFromString<List<PlotItem>>(read("seed_plots.json")) }.getOrDefault(emptyList())
-        localReservations = runCatching { Http.json.decodeFromString<List<ReservationItem>>(read("seed_reservations.json")) }.getOrDefault(emptyList())
-    }
-
-    suspend fun fetchPlots(lat: Double, lng: Double, radiusKm: Int): List<PlotItem> {
-        try {
-            val data = LandApi.searchPlots(lat, lng, radiusKm)
-            if (data.isNotEmpty()) return data.map { p ->
-                val c = p.centroid?.coordinates?.takeIf { it.size >= 2 } ?: listOf(lng, lat)
-                PlotItem(
-                    id = p.id, farmerId = p.farmerId, title = p.title, description = p.description, areaAcres = p.areaAcres,
-                    soilType = p.soilType ?: "Loam", waterSource = p.waterSource ?: "Borewell", status = p.status ?: "AVAILABLE",
-                    village = "Local Village", district = "Local District", distanceM = haversineM(lat, lng, c[1], c[0]),
-                    centroid = c, boundary = p.boundary?.coordinates ?: emptyList(),
-                    seasons = p.seasons.map { s -> PlotSeasonItem(s.id, s.plotId, s.season, s.startDate, s.endDate, s.price, s.allowedCrops) },
-                )
-            }
-        } catch (_: Exception) {
-            // Graceful fallback to the seed dataset
+    suspend fun fetchPlots(lat: Double, lng: Double, radiusKm: Int): List<PlotItem> =
+        LandApi.searchPlots(lat, lng, radiusKm).map { p ->
+            val c = p.centroid?.coordinates?.takeIf { it.size >= 2 }
+            PlotItem(
+                id = p.id, farmerId = p.farmerId, title = p.title, description = p.description, areaAcres = p.areaAcres,
+                soilType = p.soilType, waterSource = p.waterSource, status = p.status ?: "ACTIVE",
+                distanceM = c?.let { haversineM(lat, lng, it[1], it[0]) } ?: 0.0,
+                centroid = c ?: listOf(lng, lat), boundary = p.boundary?.coordinates ?: emptyList(),
+                seasons = p.seasons.map { s -> PlotSeasonItem(s.id, s.plotId, s.season, s.startDate, s.endDate, s.price, s.allowedCrops) },
+            )
         }
-        return seedPlots.map { it.copy(distanceM = haversineM(lat, lng, it.centroid[1], it.centroid[0])) }
-    }
 
-    suspend fun fetchReservations(): List<ReservationItem> {
-        try {
-            val data = LandApi.getMyReservations()
-            if (data.isNotEmpty()) return data.map { r ->
-                ReservationItem(
-                    id = r.id, plotId = r.plotSeasonId, plotTitle = r.plotTitle ?: "Reserved Farmland Plot",
-                    plotSeasonId = r.plotSeasonId, seasonName = r.seasonName ?: "Active Season", farmerId = r.farmerId,
-                    farmerName = "Assigned Farmer", cropId = r.cropId, cropName = r.cropId.uppercase(),
-                    expectedQtyKg = r.expectedQtyKg, status = r.status, deposit = r.deposit ?: 0.0, total = r.total ?: 0.0,
-                    createdAt = r.createdAt ?: LocalDate.now().toString(),
-                )
-            }
-        } catch (_: Exception) {
-            // Fallback to local reservations
-        }
-        return localReservations
-    }
+    suspend fun fetchReservations(): List<ReservationItem> = LandApi.getMyReservations().map { it.toItem() }
 
-    suspend fun submitReservation(plot: PlotItem, season: PlotSeasonItem, cropId: String, qtyKg: Double): ReservationItem {
-        val (deposit, total) = reservationEstimate(season.pricePerKg, qtyKg)
-        try {
-            LandApi.createReservation(ReservationCreate(season.id, cropId, qtyKg))
-        } catch (_: Exception) {
-            // Simulated offline creation
-        }
-        val today = LocalDate.now().toString()
-        val qtyText = if (qtyKg % 1.0 == 0.0) qtyKg.toLong().toString() else qtyKg.toString()
-        val created = ReservationItem(
-            id = "res-${System.currentTimeMillis().toString().takeLast(6)}",
-            plotId = plot.id, plotTitle = plot.title, plotSeasonId = season.id, seasonName = season.season,
-            farmerId = plot.farmerId, farmerName = plot.farmerName, farmerPhone = plot.farmerPhone,
-            cropId = cropId, cropName = cropId.replaceFirstChar { it.uppercase() }, expectedQtyKg = qtyKg,
-            status = "PENDING", deposit = deposit, total = total, createdAt = today,
-            updates = listOf(
-                CropTimelineItem(
-                    id = "upd-init-${System.currentTimeMillis()}", stage = "SOWN",
-                    stageTitle = "Reservation Submitted & Sowing Prep",
-                    note = "Reservation requested for $qtyText kg of $cropId. Farmer will accept terms and begin field preparation.",
-                    createdAt = today,
-                ),
-            ),
-        )
-        localReservations = listOf(created) + localReservations
-        return created
-    }
+    /** POST /land/reservations with the plot-season id. Throws the server's error (e.g. SEASON_ENDED). */
+    suspend fun submitReservation(plot: PlotItem, season: PlotSeasonItem, cropId: String, qtyKg: Double): ReservationItem =
+        LandApi.createReservation(ReservationCreate(season.id, cropId, qtyKg)).toItem(plot, season)
 }

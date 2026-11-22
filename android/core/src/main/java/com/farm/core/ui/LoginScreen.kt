@@ -151,16 +151,6 @@ fun SharedLoginScreen(
         }
     }
 
-    fun devLogin(role: String) {
-        resetErrors()
-        val user = AuthManager.devMockLogin(role)
-        if (role != requiredRole) {
-            localError = "Test Role Mismatch: Signed in as [$role], but this app requires [$requiredRole]. Role check verified!"
-            return
-        }
-        onSuccess(user)
-    }
-
     val onPhone: (String) -> Unit = { t ->
         phone = t.filter(Char::isDigit)
         if (localError != null) localError = null
@@ -264,34 +254,9 @@ fun SharedLoginScreen(
                 }
             }
 
-            // Dev quick test shortcuts
-            Spacer(Modifier.height(24.dp))
-            HorizontalDivider(color = Color(0xFFEEEEEE))
             Spacer(Modifier.height(16.dp))
-            FText("🛠️ Quick Test Access (Dev Mode)", fontSize = 11.sp, color = Color(0xFF888888), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
-            val otherRole = if (requiredRole == "customer") "delivery" else "customer"
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DevButton("Mock ${requiredRole.uppercase()} Login", Color(0xFFE8F5E9), Color(0xFFC8E6C9), FarmColors.Primary, Modifier.weight(1f), !loading) { devLogin(requiredRole) }
-                DevButton("Test Role Reject ($otherRole)", Color(0xFFFFF3E0), Color(0xFFFFE0B2), Color(0xFFE65100), Modifier.weight(1f), !loading) { devLogin(otherRole) }
-            }
-
             ServerAddressEditor()
         }
-    }
-}
-
-@Composable
-private fun DevButton(label: String, bg: Color, border: Color, fg: Color, modifier: Modifier, enabled: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(bg)
-            .border(1.dp, border, RoundedCornerShape(6.dp))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 8.dp, horizontal = 4.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = fg, textAlign = TextAlign.Center)
     }
 }
 

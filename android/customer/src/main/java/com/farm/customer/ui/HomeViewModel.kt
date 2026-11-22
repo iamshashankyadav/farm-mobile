@@ -19,6 +19,7 @@ import com.farm.customer.land.PlotSeasonItem
 import com.farm.customer.land.ReservationItem
 import com.farm.customer.land.filterPlots
 import com.farm.customer.land.sortPlots
+import com.farm.core.api.load
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -40,7 +41,8 @@ class HomeViewModel : ViewModel() {
     private var allListings by mutableStateOf<List<ProduceListing>>(emptyList())
     var produceLoading by mutableStateOf(true)
         private set
-    var produceError by mutableStateOf<String?>(null)
+    /** Why the last search failed (shown with Retry, and "Change server" when offline). */
+    var produceError by mutableStateOf<Throwable?>(null)
         private set
     var produceToast by mutableStateOf<String?>(null)
         private set
@@ -57,12 +59,13 @@ class HomeViewModel : ViewModel() {
         private set
     var landLoading by mutableStateOf(true)
         private set
-    var landError by mutableStateOf<String?>(null)
+    var landError by mutableStateOf<Throwable?>(null)
         private set
     var landToast by mutableStateOf<String?>(null)
         private set
+    var reservationsError by mutableStateOf<Throwable?>(null)
+        private set
     var reservingPlot by mutableStateOf<PlotItem?>(null)
-    var timelineReservation by mutableStateOf<ReservationItem?>(null)
 
     val plots: List<PlotItem> get() = sortPlots(filterPlots(allPlots, landFilters), landFilters.sort)
 
@@ -96,16 +99,15 @@ class HomeViewModel : ViewModel() {
         produceJob = viewModelScope.launch {
             produceLoading = true
             produceError = null
-            try {
-                allListings = BrowseRepository.fetchNearby(
+            load {
+                BrowseRepository.fetchNearby(
                     location.latitude, location.longitude, filters.radiusKm, filters.crop,
                     if (filters.organicOnly) true else null,
                 )
-            } catch (e: Exception) {
-                produceError = e.message ?: "Failed to load produce listings"
-            } finally {
-                produceLoading = false
             }
+                .onSuccess { allListings = it }
+                .onFailure { allListings = emptyList(); produceError = it }
+            produceLoading = false
         }
     }
 
@@ -130,24 +132,20 @@ class HomeViewModel : ViewModel() {
         landJob = viewModelScope.launch {
             landLoading = true
             landError = null
-            try {
-                val p = async { LandRepository.fetchPlots(location.latitude, location.longitude, landFilters.radiusKm) }
-                val r = async { LandRepository.fetchReservations() }
-                allPlots = p.await()
-                reservations = r.await()
-            } catch (e: Exception) {
-                landError = e.message ?: "Failed to load land data"
-            } finally {
-                landLoading = false
-            }
+            val plots = async { load { LandRepository.fetchPlots(location.latitude, location.longitude, landFilters.radiusKm) } }
+            val mine = async { load { LandRepository.fetchReservations() } }
+            plots.await().onSuccess { allPlots = it }.onFailure { allPlots = emptyList(); landError = it }
+            mine.await().onSuccess { reservations = it; reservationsError = null }
+                .onFailure { reservations = emptyList(); reservationsError = it }
+            landLoading = false
         }
     }
 
+    /** Throws the server's error (the sheet shows it); on success the new reservation is listed. */
     suspend fun createReservation(plot: PlotItem, season: PlotSeasonItem, cropId: String, qtyKg: Double) {
         val created = LandRepository.submitReservation(plot, season, cropId, qtyKg)
-        reservations = listOf(created) + reservations
-        toast(false, "✓ Reservation submitted for ${created.cropName}! Farmer notified.")
+        reservations = listOf(created) + reservations.filter { it.id != created.id }
+        toast(false, "Reservation sent for ${created.cropName}. The farmer has 48 hours to answer.")
         landSubTab = LandSubTab.MY_RESERVATIONS
-        timelineReservation = created
     }
 }

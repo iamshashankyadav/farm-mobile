@@ -14,8 +14,6 @@ import com.farm.core.auth.FarmCore
 import com.farm.core.ui.FarmTheme
 import com.farm.core.ui.SharedLoginScreen
 import com.farm.core.ui.TeamScreen
-import com.farm.customer.browse.BrowseRepository
-import com.farm.customer.land.LandRepository
 import com.farm.customer.ui.CartScreen
 import com.farm.customer.ui.CheckoutScreen
 import com.farm.customer.ui.HarvestScreen
@@ -33,8 +31,6 @@ class FarmCustomerApp : Application() {
     override fun onCreate() {
         super.onCreate()
         FarmCore.init(this)
-        BrowseRepository.init(this)
-        LandRepository.init(this)
     }
 }
 
@@ -61,7 +57,6 @@ private fun CustomerNav() {
                     orders = { nav.navigate("orders") },
                     login = { nav.navigate("login") },
                     listing = { nav.navigate("listing/$it") },
-                    harvest = { nav.navigate("harvest/$it") },
                     reservation = { nav.navigate("reservation/$it") },
                 ),
             )

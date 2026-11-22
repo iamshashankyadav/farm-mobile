@@ -1,5 +1,6 @@
 package com.farm.delivery.ui
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -54,7 +55,9 @@ import com.farm.core.ui.CenteredLoading
 import com.farm.core.ui.FText
 import com.farm.core.ui.FarmButton
 import com.farm.core.ui.FarmCard
+import com.farm.core.ui.ErrorState
 import com.farm.core.ui.FarmColors
+import com.farm.core.ui.LoadingSkeleton
 import com.farm.core.ui.Pill
 import com.farm.core.ui.ScreenHeader
 import com.farm.core.ui.TextVariant
@@ -68,6 +71,7 @@ import com.farm.delivery.route.rememberLocationPings
 import com.farm.delivery.route.routeStops
 import com.farm.delivery.route.routeSummary
 import com.farm.core.api.LogisticsApi
+import com.farm.core.api.load
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -95,25 +99,21 @@ fun RouteScreen(dateParam: String?, onBack: () -> Unit, onHome: () -> Unit) {
     var pool by remember { mutableStateOf<Pool?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<Throwable?>(null) }
     var reloadKey by remember { mutableIntStateOf(0) }
     var deliveryStop by remember { mutableStateOf<RouteStop?>(null) }
     var pickupStop by remember { mutableStateOf<RouteStop?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
 
-    suspend fun load() {
-        try {
-            pool = LogisticsApi.getMyRoute(poolDate)
-            error = null
-        } catch (e: Exception) {
-            error = e.message ?: "Try again in a moment."
-        } finally {
-            loaded = true
-            refreshing = false
-        }
+    suspend fun loadRoute() {
+        load { LogisticsApi.getMyRoute(poolDate) }
+            .onSuccess { pool = it; error = null }
+            .onFailure { error = it }
+        loaded = true
+        refreshing = false
     }
 
-    LaunchedEffect(isPartner, reloadKey) { if (isPartner) load() }
+    LaunchedEffect(isPartner, reloadKey) { if (isPartner) loadRoute() }
     LaunchedEffect(toast) {
         if (toast != null) {
             delay(3500)
@@ -144,13 +144,13 @@ fun RouteScreen(dateParam: String?, onBack: () -> Unit, onHome: () -> Unit) {
     fun onStopDone(stopId: String) {
         pool = markStopDone(pool, stopId)
         toast = "Stop status updated successfully!"
-        scope.launch { load() }
+        scope.launch { loadRoute() }
     }
 
     fun navigate(stop: RouteStop) {
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(mapsUrl(stop.lat, stop.lng, stop.label))))
-        } catch (_: Exception) {
+        } catch (_: ActivityNotFoundException) {
             Toast.makeText(context, "Could not open Google Maps on this device.", Toast.LENGTH_LONG).show()
         }
     }
@@ -168,17 +168,9 @@ fun RouteScreen(dateParam: String?, onBack: () -> Unit, onHome: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 when {
-                    !loaded -> item {
-                        Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = FarmColors.Primary)
-                        }
-                    }
+                    !loaded -> item { LoadingSkeleton() }
                     error != null && pool == null -> item {
-                        FarmCard(Modifier.fillMaxWidth(), background = FarmColors.PrimaryLight) {
-                            FText("Could not load your route", variant = TextVariant.H2)
-                            FText(error ?: "", variant = TextVariant.Caption, modifier = Modifier.padding(top = 4.dp))
-                            FarmButton("Try again", { reloadKey++ }, Modifier.padding(top = 12.dp))
-                        }
+                        ErrorState(error, { reloadKey++ }, title = "Could not load your route")
                     }
                     stops.isEmpty() -> item {
                         FarmCard(Modifier.fillMaxWidth(), background = FarmColors.PrimaryLight) {

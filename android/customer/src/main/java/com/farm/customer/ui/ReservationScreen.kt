@@ -60,8 +60,8 @@ import com.farm.core.ui.TextVariant
 import com.farm.customer.checkout.formatQty
 import com.farm.customer.orders.formatDate
 import com.farm.customer.orders.formatDateTime
-import com.farm.customer.orders.load
-import com.farm.customer.orders.loadErrorMessage
+import com.farm.core.api.load
+import com.farm.core.api.loadErrorMessage
 import com.farm.customer.orders.rupees
 import com.farm.customer.reservation.DEPOSIT_POLL_LIMIT_MS
 import com.farm.customer.reservation.DEPOSIT_POLL_MS

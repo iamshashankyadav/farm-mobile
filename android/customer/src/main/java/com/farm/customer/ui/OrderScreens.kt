@@ -80,6 +80,7 @@ import com.farm.core.ui.FarmButton
 import com.farm.core.ui.FarmCard
 import com.farm.core.ui.FarmColors
 import com.farm.core.ui.FarmInput
+import com.farm.core.ui.LoadingSkeleton
 import com.farm.core.ui.Pill
 import com.farm.core.ui.ScreenHeader
 import com.farm.core.ui.TextVariant
@@ -108,8 +109,8 @@ import com.farm.customer.notifications.newestFirst
 import com.farm.customer.notifications.notificationTarget
 import com.farm.customer.orders.itemsLabel
 import com.farm.customer.reservation.showHarvestChoice
-import com.farm.customer.orders.load
-import com.farm.customer.orders.loadErrorMessage
+import com.farm.core.api.load
+import com.farm.core.api.loadErrorMessage
 import com.farm.customer.orders.orderTitle
 import com.farm.customer.orders.parseChoiceError
 import com.farm.customer.orders.phaseOf
@@ -203,7 +204,7 @@ fun OrdersScreen(onBack: () -> Unit, onHome: () -> Unit, onOrder: (String) -> Un
             PullToRefreshBox(refreshing, { refreshing = true; reload++ }, Modifier.fillMaxSize()) {
                 val (active, past) = splitOrders(orders)
                 LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (!loaded) item { Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = FarmColors.Primary) } }
+                    if (!loaded) item { LoadingSkeleton() }
                     if (loaded && failed) item {
                         FarmCard(Modifier.fillMaxWidth()) {
                             FText("Could not load your orders", variant = TextVariant.H2, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
@@ -491,7 +492,7 @@ fun NotificationsScreen(
             PullToRefreshBox(refreshing, { refreshing = true; reload++ }, Modifier.fillMaxSize()) {
                 LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     when {
-                        !loaded -> item { Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = FarmColors.Primary) } }
+                        !loaded -> item { LoadingSkeleton() }
                         failure != null && items.isEmpty() -> item {
                             FarmCard(Modifier.fillMaxWidth()) {
                                 FText("Could not load notifications", variant = TextVariant.H2, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
