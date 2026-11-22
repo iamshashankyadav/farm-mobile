@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -70,6 +71,7 @@ import com.farm.customer.checkout.CheckoutError
 import com.farm.customer.checkout.CheckoutSession
 import com.farm.customer.checkout.DELIVERY_FEE_PER_ORDER
 import com.farm.customer.checkout.RealCheckoutApi
+import com.farm.customer.checkout.breakdown
 import com.farm.customer.checkout.estimateTotal
 import com.farm.customer.checkout.formatQty
 import com.farm.customer.checkout.formatRupees
@@ -262,7 +264,8 @@ fun CheckoutScreen(onBack: () -> Unit, onCart: () -> Unit, onLogin: () -> Unit, 
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<CheckoutError?>(null) }
     val groups = cart.groupByFarm()
-    val total = cart.estimateTotal(DELIVERY_FEE_PER_ORDER)
+    val breakdown = cart.breakdown(DELIVERY_FEE_PER_ORDER)
+    val total = breakdown.total
 
     fun set(field: String, update: AddressForm.(String) -> AddressForm): (String) -> Unit = { v ->
         form = form.update(v)
@@ -303,12 +306,21 @@ fun CheckoutScreen(onBack: () -> Unit, onCart: () -> Unit, onLogin: () -> Unit, 
         ) {
             FarmCard(Modifier.fillMaxWidth()) {
                 FText("Order summary", variant = TextVariant.H2, fontSize = 18.sp)
-                groups.forEach { g ->
-                    FText(g.farmName, variant = TextVariant.Label, modifier = Modifier.padding(top = 8.dp))
-                    g.items.forEach { FText("${it.name} · ${formatQty(it.qty)} ${it.unit} · ${formatRupees(it.unitPrice * it.qty)}", variant = TextVariant.Caption) }
+                if (breakdown.farms.size > 1) {
+                    FText("Your cart becomes ${breakdown.farms.size} orders, one per farm.", variant = TextVariant.Caption)
                 }
-                FText("Total ${formatRupees(total)} (incl. delivery)", variant = TextVariant.Label, modifier = Modifier.padding(top = 8.dp))
-                FText("Payment is simulated: no real money is taken.", variant = TextVariant.Caption)
+                groups.forEach { g ->
+                    val charge = breakdown.farms.first { it.farmId == g.farmId }
+                    FText(g.farmName, variant = TextVariant.Label, modifier = Modifier.padding(top = 8.dp))
+                    g.items.forEach { SummaryLine("${it.name} · ${formatQty(it.qty)} ${it.unit}", formatRupees(round2(it.unitPrice * it.qty))) }
+                    SummaryLine("Delivery", formatRupees(charge.deliveryFee))
+                    SummaryLine("Order total", formatRupees(charge.total), bold = true)
+                }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp), color = FarmColors.Border)
+                SummaryLine("Items", formatRupees(breakdown.items))
+                SummaryLine("Delivery (${breakdown.farms.size} × ${formatRupees(DELIVERY_FEE_PER_ORDER)})", formatRupees(breakdown.delivery))
+                SummaryLine("To pay", formatRupees(breakdown.total), bold = true)
+                FText("Payment is simulated: no real money is taken.", variant = TextVariant.Caption, modifier = Modifier.padding(top = 4.dp))
             }
             FarmCard(Modifier.fillMaxWidth()) {
                 FText("Delivery address", variant = TextVariant.H2, fontSize = 18.sp)
@@ -322,8 +334,19 @@ fun CheckoutScreen(onBack: () -> Unit, onCart: () -> Unit, onLogin: () -> Unit, 
                 FarmInput(notes, { notes = it }, label = "Note for the farmer (optional)")
             }
             error?.let { e -> CheckoutErrorCard(e, cart, onLogin) }
-            FarmButton("Place order · ${formatRupees(total)}", ::placeOrder, Modifier.fillMaxWidth(), loading = submitting, enabled = !submitting)
+            FarmButton(
+                if (error is CheckoutError.PaymentFailed) "Try again · ${formatRupees(total)}" else "Place order · ${formatRupees(total)}",
+                ::placeOrder, Modifier.fillMaxWidth(), loading = submitting, enabled = !submitting,
+            )
         }
+    }
+}
+
+@Composable
+private fun SummaryLine(label: String, value: String, bold: Boolean = false) {
+    Row(Modifier.fillMaxWidth().padding(top = 2.dp)) {
+        FText(label, variant = if (bold) TextVariant.Label else TextVariant.Caption, modifier = Modifier.weight(1f))
+        FText(value, variant = if (bold) TextVariant.Label else TextVariant.Caption)
     }
 }
 
@@ -342,6 +365,18 @@ private fun CheckoutErrorCard(e: CheckoutError, cart: com.farm.customer.checkout
                 }
                 FarmButton("Update my cart", { CartStore.adjustToStock(e.shortages) }, Modifier.padding(top = 8.dp), variant = ButtonVariant.Secondary)
             }
+            is CheckoutError.ListingUnavailable -> {
+                val gone = cart.items.filter { it.listingId in e.listingIds }
+                gone.forEach { FText("${it.name} (${it.farmName}) is no longer for sale.", variant = TextVariant.Caption) }
+                if (gone.isNotEmpty()) {
+                    FarmButton(
+                        if (gone.size == 1) "Remove it from my cart" else "Remove them from my cart",
+                        { gone.forEach { CartStore.remove(it.listingId) } },
+                        Modifier.padding(top = 8.dp), variant = ButtonVariant.Secondary,
+                    )
+                }
+            }
+            is CheckoutError.PaymentFailed -> FText("Tap Try again to pay again; it starts a fresh payment.", variant = TextVariant.Caption)
             is CheckoutError.Validation -> e.fields.forEach { (f, m) -> FText("$f: $m", variant = TextVariant.Caption) }
             is CheckoutError.Unauthorized -> FarmButton("Log in", onLogin, Modifier.padding(top = 8.dp), variant = ButtonVariant.Secondary)
             else -> {}
