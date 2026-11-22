@@ -13,26 +13,52 @@ It talks to the same backend gateway (`farm-backend`, `/api/v1`); nothing in the
 
 ## Build
 
-Open the `android/` folder in Android Studio and run `customer` or `delivery`. From a terminal:
+Needs JDK 17 or 21 and the Android SDK (platform 35). Point Gradle at the SDK with `ANDROID_HOME`
+or a `local.properties` file containing `sdk.dir=/path/to/Android/Sdk` (Android Studio writes it
+for you). Open the `android/` folder in Android Studio and run `customer` or `delivery`, or from a
+terminal, one command per app:
 
 ```bash
 cd android
-./gradlew assembleRelease     # customer/build/outputs/apk/release/customer-release.apk
-                              # delivery/build/outputs/apk/release/delivery-release.apk
-./gradlew testDebugUnitTest   # unit tests (route, cart, checkout)
+./gradlew :customer:assembleDebug   # customer/build/outputs/apk/debug/customer-debug.apk
+./gradlew :delivery:assembleDebug   # delivery/build/outputs/apk/debug/delivery-debug.apk
+./gradlew testDebugUnitTest         # unit tests of both apps
+./gradlew assembleRelease           # release APKs, signed with the debug key
 ```
 
+Install a debug APK on a connected phone or emulator with `adb install -r <apk>`.
 Release APKs are signed with the debug key, so they install directly on any phone (allow "install unknown apps").
 Use your own keystore for a Play Store release.
 
 ## API server
 
-The default gateway is `farmApiBaseUrl` in `gradle.properties` (`http://10.1.75.79:4501/api/v1`).
-It can also be changed in the app: login screen → **Server: … → Change**. The phone must be on a network that can reach that address.
+The apps call the backend gateway, `<server>/api/v1`. The address is set in two places:
+
+1. **At build time**, the Gradle property `farmApiBaseUrl`. The default is in `gradle.properties`;
+   override it without editing the file:
+
+   ```bash
+   ./gradlew :customer:assembleDebug -PfarmApiBaseUrl=http://10.0.2.2/api/v1
+   # or: export ORG_GRADLE_PROJECT_farmApiBaseUrl=http://10.0.2.2/api/v1
+   ```
+
+2. **At run time**, on the login screen: **Server: … → Change**. The app keeps that address until it
+   is changed again (or reset to the built-in default), so a new IP does not need a new APK.
+
+Which address to use:
+
+| Where the backend runs | Device | Base URL |
+| --- | --- | --- |
+| Team VM (college network or VPN) | any | `http://10.1.75.79:4501/api/v1` (the default) |
+| `docker compose up -d` in `farm-backend` on your laptop | Android emulator | `http://10.0.2.2/api/v1` (the emulator's name for the host) |
+| `docker compose up -d` on your laptop | phone on the same Wi-Fi | `http://<laptop LAN IP>/api/v1`, e.g. `http://192.168.1.20/api/v1` |
+
+Demo accounts and the demo story are in `farm-backend/docs/DEMO.md` (password `Farm@12345`).
 Plain HTTP is allowed (`usesCleartextTraffic`) because the gateway runs without TLS.
 
-Without a backend, the customer app falls back to the same seed produce / plots / reservations as before
+Without a backend, the customer app currently falls back to the same seed produce / plots / reservations as before
 (`customer/src/main/assets/*.json`), and both login screens have the "Mock … Login" dev buttons.
+Both are being removed (#36); `NOTES.md` lists every screen's state.
 
 ## Differences from the React Native version
 
