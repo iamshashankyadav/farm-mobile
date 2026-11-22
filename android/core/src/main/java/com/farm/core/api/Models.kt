@@ -175,6 +175,8 @@ data class ReservationOut(
     val createdAt: String? = null,
     val plotTitle: String? = null,
     val seasonName: String? = null,
+    /** When a PENDING request lapses if the farmer does not answer (48 hours). */
+    val expiresAt: String? = null,
 )
 
 // ─── Logistics ───────────────────────────────────────────────────────────────
@@ -237,6 +239,38 @@ data class Track(
     val partnerLng: Double? = null,
     val partnerUpdatedAt: String? = null,
     val eta: String? = null,
+)
+
+/** GET /land/reservations/{id}/updates: one crop update the farmer posted. */
+@Serializable
+data class CropUpdateOut(
+    val id: String,
+    val reservationId: String = "",
+    val stage: String = "",
+    val note: String? = null,
+    val mediaIds: List<String> = emptyList(),
+    val location: GeoPoint? = null,
+    val createdAt: String = "",
+)
+
+/** GET /land/reservations/{id}/agreement: the terms made when the farmer accepted. */
+@Serializable
+data class AgreementOut(
+    val id: String,
+    val reservationId: String = "",
+    val plotId: String = "",
+    val plotTitle: String = "",
+    val season: String = "",
+    val startDate: String = "",
+    val endDate: String = "",
+    val cropId: String = "",
+    val expectedQtyKg: Double = 0.0,
+    val pricePerKg: Double = 0.0,
+    val total: Double = 0.0,
+    val deposit: Double = 0.0,
+    val balance: Double = 0.0,
+    val terms: List<String> = emptyList(),
+    val createdAt: String = "",
 )
 
 // ─── Order ───────────────────────────────────────────────────────────────────
