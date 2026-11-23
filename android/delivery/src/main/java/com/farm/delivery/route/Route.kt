@@ -114,7 +114,8 @@ fun dialUri(phone: String?): String? {
 fun routeLengthM(stops: List<RouteStop>): Double =
     stops.zipWithNext().sumOf { (a, b) -> haversine(a.lat, a.lng, b.lat, b.lng) }
 
-private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+/** Straight-line distance between two points, in metres. */
+fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     val r = 6371000.0
     val dp = Math.toRadians(lat2 - lat1)
     val dl = Math.toRadians(lon2 - lon1)

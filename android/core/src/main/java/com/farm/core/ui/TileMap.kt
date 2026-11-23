@@ -1,6 +1,14 @@
 package com.farm.core.ui
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.DashPathEffect
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -37,7 +45,22 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import java.io.File
 
-/** One pin on a [TileMap]. */
+/** What a [MapPin] marks; each kind has its own icon so the map reads at a glance. */
+enum class PinKind {
+    /** A plain tinted pin (farms, plots). */
+    DEFAULT,
+
+    /** The person's own position: a blue dot with a white ring. */
+    ME,
+
+    /** Where goods are collected: a green pin with a box. */
+    PICKUP,
+
+    /** Where goods are delivered: an orange pin with a house. */
+    DROP,
+}
+
+/** One pin on a [TileMap]. [badge] (e.g. the stop number) is drawn in a small circle on the pin. */
 data class MapPin(
     val key: String,
     val lat: Double,
@@ -45,25 +68,124 @@ data class MapPin(
     val title: String,
     val snippet: String? = null,
     val color: Color = FarmColors.Primary,
+    val kind: PinKind = PinKind.DEFAULT,
+    val badge: String? = null,
+    /** A finished stop: drawn grey. */
+    val muted: Boolean = false,
 )
+
+/** Colours of the delivery pins, shared with legends and stop cards so they match the map. */
+object PinColors {
+    val Me = Color(0xFF2F5FD0)
+    val Pickup = Color(0xFF1D7A4D)
+    val Drop = Color(0xFFD9730D)
+    val Muted = Color(0xFF9AA1A7)
+    val Route = Color(0xFF3A4249)
+}
 
 /** Key of the "you are here" pin in [TileMap]; tapping it selects nothing. */
 const val ME_PIN_KEY = "__me"
 
-/** The person's own position as a blue pin (title "You are here", or the place they chose). */
+/** The person's own position as a blue dot (title "You are here", or the place they chose). */
 fun mePin(lat: Double, lng: Double, title: String = "You are here") =
-    MapPin(ME_PIN_KEY, lat, lng, title, color = Color(0xFF2F5FD0))
+    MapPin(ME_PIN_KEY, lat, lng, title, color = PinColors.Me, kind = PinKind.ME)
 
-/** A blue "you are here" marker for osmdroid maps that draw their own overlays. */
+/** A blue "you are here" dot for osmdroid maps that draw their own overlays. */
 fun meMarker(map: MapView, lat: Double, lng: Double, title: String = "You are here"): Marker = Marker(map).apply {
     position = GeoPoint(lat, lng)
     this.title = title
-    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-    ContextCompat.getDrawable(map.context, org.osmdroid.library.R.drawable.marker_default)?.mutate()?.let { d ->
-        d.setTint(Color(0xFF2F5FD0).toArgb())
-        icon = d
-    }
+    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+    pinIcon(map.context, mePin(lat, lng, title), selected = false)?.let { icon = it }
     setOnMarkerClickListener { m, _ -> m.showInfoWindow(); true }
+}
+
+private val iconCache = HashMap<String, Drawable>()
+
+/**
+ * The marker icon for [pin]: a blue dot for [PinKind.ME], a coloured teardrop with 📦 / 🏠 for
+ * pickups and drops (plus the [MapPin.badge] number), and the tinted default pin otherwise.
+ */
+fun pinIcon(context: Context, pin: MapPin, selected: Boolean): Drawable? {
+    if (pin.kind == PinKind.DEFAULT) {
+        return ContextCompat.getDrawable(context, org.osmdroid.library.R.drawable.marker_default)?.mutate()?.apply {
+            setTint((if (selected) FarmColors.Info else pin.color).toArgb())
+        }
+    }
+    val cacheKey = "${pin.kind}|${pin.badge}|${pin.muted}|$selected"
+    iconCache[cacheKey]?.let { return it }
+    val density = context.resources.displayMetrics.density
+    val bmp = if (pin.kind == PinKind.ME) drawMeDot(density) else drawStopPin(density, pin, selected)
+    return BitmapDrawable(context.resources, bmp).also { iconCache[cacheKey] = it }
+}
+
+private fun drawMeDot(d: Float): Bitmap {
+    val size = (30 * d).toInt()
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val cx = size / 2f
+    val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    p.color = PinColors.Me.copy(alpha = 0.22f).toArgb()
+    c.drawCircle(cx, cx, cx, p)
+    p.color = android.graphics.Color.WHITE
+    c.drawCircle(cx, cx, 9 * d, p)
+    p.color = PinColors.Me.toArgb()
+    c.drawCircle(cx, cx, 6.5f * d, p)
+    return bmp
+}
+
+private fun drawStopPin(d: Float, pin: MapPin, selected: Boolean): Bitmap {
+    val scale = if (selected) 1.2f else 1f
+    val w = 34 * d * scale
+    val h = 44 * d * scale
+    val badgeRoom = 8 * d * scale
+    val bmp = Bitmap.createBitmap((w + badgeRoom).toInt(), h.toInt(), Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val color = when {
+        pin.muted -> PinColors.Muted
+        pin.kind == PinKind.PICKUP -> PinColors.Pickup
+        else -> PinColors.Drop
+    }
+    val r = w / 2f
+    // Centred in the bitmap so the bottom-centre anchor sits on the point of the pin.
+    val cx = bmp.width / 2f
+    val cy = r
+    val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    // Teardrop: a circle with a point at the bottom.
+    val tail = Path().apply {
+        moveTo(cx, h)
+        lineTo(cx - r * 0.62f, cy + r * 0.78f)
+        lineTo(cx + r * 0.62f, cy + r * 0.78f)
+        close()
+    }
+    p.color = color.toArgb()
+    c.drawPath(tail, p)
+    c.drawCircle(cx, cy, r, p)
+    p.color = android.graphics.Color.WHITE
+    c.drawCircle(cx, cy, r * 0.72f, p)
+    val glyph = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = r * 0.85f
+        textAlign = Paint.Align.CENTER
+        if (pin.muted) alpha = 110
+    }
+    val glyphText = if (pin.kind == PinKind.PICKUP) "📦" else "🏠"
+    c.drawText(glyphText, cx, cy - (glyph.descent() + glyph.ascent()) / 2f, glyph)
+    pin.badge?.let { b ->
+        val br = 8.5f * d * scale
+        val bx = bmp.width - br - 1.5f * d
+        val by = br + 1.5f * d
+        p.color = android.graphics.Color.WHITE
+        c.drawCircle(bx, by, br + 1.5f * d, p)
+        p.color = PinColors.Route.toArgb()
+        c.drawCircle(bx, by, br, p)
+        val t = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = android.graphics.Color.WHITE
+            textSize = br * 1.15f
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        c.drawText(b, bx, by - (t.descent() + t.ascent()) / 2f, t)
+    }
+    return bmp
 }
 
 /** osmdroid needs an identifying user agent (OSM tile policy) and a writable cache. */
@@ -77,8 +199,9 @@ fun configureOsm(context: Context) {
 
 /**
  * OpenStreetMap tiles (osmdroid, no API key) with [pins] as markers and, optionally, a [path]
- * drawn through points in order. On first show and whenever the set of pins changes, the map fits
- * them all. Tapping a pin calls [onSelect].
+ * drawn through points in order and a dashed [leadIn] (e.g. from the driver to the first stop).
+ * On first show and whenever the set of pins changes, the map fits them all. Tapping a pin calls
+ * [onSelect]. With [interactive] off the map is a still preview: no panning, zooming or taps.
  */
 @Composable
 fun TileMap(
@@ -89,6 +212,8 @@ fun TileMap(
     selectedKey: String? = null,
     onSelect: (String) -> Unit = {},
     path: List<Pair<Double, Double>> = emptyList(),
+    leadIn: List<Pair<Double, Double>> = emptyList(),
+    interactive: Boolean = true,
     description: String = "Map",
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
@@ -99,8 +224,13 @@ fun TileMap(
         configureOsm(context)
         MapView(context).apply {
             setTileSource(TileSourceFactory.MAPNIK)
-            setMultiTouchControls(true)
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
+            setMultiTouchControls(interactive)
+            zoomController.setVisibility(
+                if (interactive) CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT
+                else CustomZoomButtonsController.Visibility.NEVER,
+            )
+            // A preview swallows touches so it neither pans nor reacts to a scroll of the list.
+            if (!interactive) setOnTouchListener { _, _ -> true }
             controller.setZoom(12.0)
             controller.setCenter(GeoPoint(centerLat, centerLng))
         }
@@ -127,7 +257,7 @@ fun TileMap(
         val points = pins.map { GeoPoint(it.lat, it.lng) }
         when {
             points.size >= 2 -> mapView.post {
-                runCatching { mapView.zoomToBoundingBox(BoundingBox.fromGeoPoints(points).increaseByScale(1.3f), false) }
+                runCatching { mapView.zoomToBoundingBox(BoundingBox.fromGeoPoints(points).increaseByScale(1.35f), false) }
             }
             points.size == 1 -> mapView.controller.animateTo(points[0])
             else -> mapView.controller.animateTo(GeoPoint(centerLat, centerLng))
@@ -140,30 +270,42 @@ fun TileMap(
             modifier = Modifier.fillMaxSize(),
             update = { map ->
                 map.overlays.removeAll { it is Marker || it is Polyline }
+                val density = map.context.resources.displayMetrics.density
+                if (leadIn.size >= 2) {
+                    map.overlays.add(
+                        Polyline(map).apply {
+                            setPoints(leadIn.map { GeoPoint(it.first, it.second) })
+                            outlinePaint.color = PinColors.Me.toArgb()
+                            outlinePaint.strokeWidth = 3f * density
+                            outlinePaint.pathEffect = DashPathEffect(floatArrayOf(8f * density, 6f * density), 0f)
+                        },
+                    )
+                }
                 if (path.size >= 2) {
                     map.overlays.add(
                         Polyline(map).apply {
                             setPoints(path.map { GeoPoint(it.first, it.second) })
-                            outlinePaint.color = FarmColors.Info.toArgb()
-                            outlinePaint.strokeWidth = 6f
+                            outlinePaint.color = PinColors.Route.toArgb()
+                            outlinePaint.strokeWidth = 4f * density
+                            outlinePaint.strokeCap = Paint.Cap.ROUND
                         },
                     )
                 }
-                pins.forEach { pin ->
+                // Your own dot is drawn last so stops never hide it.
+                pins.sortedBy { it.kind == PinKind.ME }.forEach { pin ->
                     val selected = pin.key == selectedKey
                     map.overlays.add(
                         Marker(map).apply {
                             position = GeoPoint(pin.lat, pin.lng)
                             title = pin.title
                             snippet = pin.snippet
-                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                            ContextCompat.getDrawable(map.context, org.osmdroid.library.R.drawable.marker_default)?.mutate()?.let { d ->
-                                d.setTint((if (selected) FarmColors.Info else pin.color).toArgb())
-                                icon = d
-                            }
+                            setAnchor(Marker.ANCHOR_CENTER, if (pin.kind == PinKind.ME) Marker.ANCHOR_CENTER else Marker.ANCHOR_BOTTOM)
+                            pinIcon(map.context, pin, selected)?.let { icon = it }
                             setOnMarkerClickListener { m, _ ->
-                                if (pin.key != ME_PIN_KEY) select(pin.key)
-                                m.showInfoWindow()
+                                if (interactive) {
+                                    if (pin.key != ME_PIN_KEY) select(pin.key)
+                                    m.showInfoWindow()
+                                }
                                 true
                             }
                         },

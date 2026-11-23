@@ -57,6 +57,9 @@ data class TrackingState(
     val pingCount: Int = 0,
     val lastPingTime: String? = null,
     val error: String? = null,
+    /** The phone's last known position, shown as "you" on the maps. */
+    val lat: Double? = null,
+    val lng: Double? = null,
 )
 
 /** Shared between the foreground service (writes) and the route screen (reads). */
@@ -142,6 +145,7 @@ class LocationPingService : Service() {
             poolId = poolId,
         )
         val now = LocalTime.now().format(DateTimeFormatter.ofPattern("hh:mm:ss a"))
+        RouteTracker.update { it.copy(lat = loc.latitude, lng = loc.longitude) }
         RouteTracker.update {
             if (sent) it.copy(pingCount = it.pingCount + 1, lastPingTime = now, error = null)
             else it.copy(error = "The last position could not be sent (no connection or refused). Retrying in 30 s.")

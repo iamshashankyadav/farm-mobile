@@ -232,6 +232,10 @@ data class Stop(
 @Serializable
 data class OfferPlace(val lat: Double = 0.0, val lng: Double = 0.0, val address: String? = null)
 
+/** One stop of an offered route, in driving order (no address until the route is accepted). */
+@Serializable
+data class OfferStop(val seq: Int = 0, val stopType: String = "DROP", val lat: Double = 0.0, val lng: Double = 0.0)
+
 /** A route offered to this partner that nobody has accepted yet (GET /logistics/offers/mine). */
 @Serializable
 data class RouteOffer(
@@ -244,6 +248,8 @@ data class RouteOffer(
     /** From the partner to the first pickup, when the server knows where the partner is. */
     val distanceKm: Double? = null,
     val firstPickup: OfferPlace? = null,
+    /** Every stop in driving order, to draw the route before accepting. Empty from older servers. */
+    val stops: List<OfferStop> = emptyList(),
     val offeredAt: String = "",
     val expiresAt: String? = null,
 )
