@@ -1,5 +1,9 @@
 package com.farm.customer.ui
 
+import com.farm.customer.browse.NEAR_ME
+
+import com.farm.core.ui.mePin
+
 import androidx.compose.runtime.collectAsState
 
 import com.farm.customer.prefs.LocalLists
@@ -260,7 +264,7 @@ fun ProduceMapView(listings: List<ProduceListing>, location: LocationCoords, onO
                     it.id, it.pickupCoordinates.getOrElse(1) { 0.0 }, it.pickupCoordinates.getOrElse(0) { 0.0 },
                     "${it.cropName} · ${formatRupees(it.pricePerUnit)}/${it.unit}", it.farmName,
                 )
-            },
+            } + mePin(location.latitude, location.longitude, if (location.name == NEAR_ME) "You are here" else "Searching around ${location.name}"),
             centerLat = location.latitude,
             centerLng = location.longitude,
             selectedKey = selected?.id,

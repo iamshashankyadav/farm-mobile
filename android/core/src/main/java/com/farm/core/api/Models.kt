@@ -230,6 +230,25 @@ data class Stop(
 )
 
 @Serializable
+data class OfferPlace(val lat: Double = 0.0, val lng: Double = 0.0, val address: String? = null)
+
+/** A route offered to this partner that nobody has accepted yet (GET /logistics/offers/mine). */
+@Serializable
+data class RouteOffer(
+    val poolId: String,
+    val poolDate: String = "",
+    val stopCount: Int = 0,
+    val pickupCount: Int = 0,
+    val dropCount: Int = 0,
+    val totalKm: Double? = null,
+    /** From the partner to the first pickup, when the server knows where the partner is. */
+    val distanceKm: Double? = null,
+    val firstPickup: OfferPlace? = null,
+    val offeredAt: String = "",
+    val expiresAt: String? = null,
+)
+
+@Serializable
 data class Pool(
     val id: String,
     val poolDate: String = "",

@@ -140,7 +140,10 @@ fun RouteScreen(dateParam: String?, onBack: (() -> Unit)?, onHome: () -> Unit) {
 
     val stops = routeStops(pool)
     val summary = routeSummary(stops)
-    LocationSharing(active = isPartner && summary.next != null, poolId = pool?.id)
+    var available by remember { mutableStateOf(Availability.get(context)) }
+    // Share the position while working a route, and also while waiting for one when the partner
+    // is available, so dispatch can offer routes near them.
+    LocationSharing(active = isPartner && (summary.next != null || available), poolId = pool?.id)
     val pings by RouteTracker.state.collectAsState()
 
     if (auth.isLoading) return CenteredLoading()
@@ -206,6 +209,23 @@ fun RouteScreen(dateParam: String?, onBack: (() -> Unit)?, onHome: () -> Unit) {
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (loaded && summary.next == null) {
+                    item {
+                        AvailabilityCard(available) { on ->
+                            available = on
+                            Availability.set(context, on)
+                        }
+                    }
+                }
+                if (available) {
+                    item {
+                        RouteOffers(reloadKey) { accepted ->
+                            pool = accepted
+                            toast = "Route accepted. Your stops are below."
+                            reloadKey++
+                        }
+                    }
+                }
                 when {
                     !loaded -> item { LoadingSkeleton() }
                     error != null && pool == null -> item {

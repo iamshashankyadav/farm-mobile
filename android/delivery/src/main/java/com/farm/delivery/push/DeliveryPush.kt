@@ -30,6 +30,7 @@ private val ISO_DATE = Regex("^\\d{4}-\\d{2}-\\d{2}$")
 fun routeForPush(data: Map<String, String>): String? {
     val date = data[EXTRA_POOL_DATE]?.trim()?.takeIf { ISO_DATE.matches(it) }
     if (date != null) return "route?date=$date"
+    // A route offer (or any route push without a date) opens the Route tab, where offers are listed
     return if (data.containsKey("poolId") || data["type"]?.startsWith("ORDER_POOLED") == true || data["type"]?.startsWith("POOL_") == true) "route" else null
 }
 
@@ -74,6 +75,11 @@ class DeliveryMessagingService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .setContentIntent(pending)
             .build()
-        runCatching { NotificationManagerCompat.from(this).notify(message.messageId?.hashCode() ?: body.hashCode(), notification) }
+        // A tag (e.g. "pool-<id>") makes "Route taken" replace the offer it is about.
+        val tag = message.data["tag"]
+        runCatching {
+            if (tag != null) NotificationManagerCompat.from(this).notify(tag, 0, notification)
+            else NotificationManagerCompat.from(this).notify(message.messageId?.hashCode() ?: body.hashCode(), notification)
+        }
     }
 }
