@@ -38,6 +38,15 @@ data class RouteSummary(
     val next: RouteStop?,
 )
 
+/**
+ * What the map draws: the road path from the backend, or straight lines between the stops when the
+ * backend sent none (routing engine down, or an older route without one).
+ */
+fun routeLine(pool: Pool?, stops: List<RouteStop>): List<Pair<Double, Double>> {
+    val road = pool?.routePath?.mapNotNull { if (it.size >= 2) it[0] to it[1] else null }.orEmpty()
+    return if (road.size >= 2) road else stops.map { it.lat to it.lng }
+}
+
 private fun shortOrder(orderId: String) = "#${orderId.take(8)}"
 
 private fun statusOf(s: String): StopStatus = when (s) {
