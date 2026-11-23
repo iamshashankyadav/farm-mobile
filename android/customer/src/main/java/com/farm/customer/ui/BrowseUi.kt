@@ -77,7 +77,6 @@ import com.farm.customer.browse.formatRating
 import com.farm.customer.browse.ratingLabel
 import com.farm.customer.browse.ratingStars
 import com.farm.customer.browse.formatHarvestDate
-import com.farm.customer.browse.photoVerification
 import com.farm.customer.checkout.CartItem
 import com.farm.customer.checkout.CartStore
 import com.farm.customer.checkout.formatRupees
@@ -104,22 +103,6 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifie
 }
 
 @Composable
-fun VerifiedBadge(photo: ProducePhoto?, compact: Boolean, modifier: Modifier = Modifier) {
-    val m = photoVerification(photo)
-    if (compact) {
-        Pill(m.shortLabel, hex(m.bg), hex(m.fg), modifier, border = hex(m.border))
-    } else {
-        Column(
-            modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(hex(m.bg))
-                .border(1.dp, hex(m.border), RoundedCornerShape(10.dp)).padding(12.dp),
-        ) {
-            Text(m.label, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = hex(m.fg))
-            Text(m.description, fontSize = 12.sp, color = hex(m.fg), modifier = Modifier.padding(top = 2.dp))
-        }
-    }
-}
-
-@Composable
 fun ListingCard(listing: ProduceListing, onOpen: () -> Unit, onAdded: (ProduceListing) -> Unit) {
     val photo = listing.photos.firstOrNull()
     FarmCard(Modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(0.dp), onClick = onOpen) {
@@ -129,7 +112,6 @@ fun ListingCard(listing: ProduceListing, onOpen: () -> Unit, onAdded: (ProduceLi
             } else {
                 Text("🥕", fontSize = 48.sp, modifier = Modifier.align(Alignment.Center))
             }
-            VerifiedBadge(photo, compact = true, modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
             Row(Modifier.align(Alignment.TopEnd).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (listing.isOrganic) Pill("🌱 Organic", FarmColors.Primary, Color.White)
                 FavouriteButton(listing.farmId, listing.farmName)
@@ -283,7 +265,6 @@ fun ProduceMapView(listings: List<ProduceListing>, location: LocationCoords, onO
                         FText("🏡 ${selected.farmName}" + placeOf(selected)?.let { " · $it" }.orEmpty(), variant = TextVariant.Label)
                         FarmRatingText(selected.farmRating, selected.farmRatingCount)
                         FText("📍 ${formatDistance(selected.distanceM)} away  •  ${qtyText(selected.qtyAvailable)} ${selected.unit} left", variant = TextVariant.Caption)
-                        VerifiedBadge(selected.photos.firstOrNull(), true, Modifier.padding(top = 6.dp))
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text(formatRupees(selected.pricePerUnit), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = FarmColors.PrimaryDark)
