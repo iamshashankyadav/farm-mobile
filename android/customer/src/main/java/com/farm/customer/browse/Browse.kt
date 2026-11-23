@@ -70,7 +70,7 @@ enum class SortOption(val label: String, val api: String) {
 data class FilterState(
     val query: String = "",
     val crop: String? = null,
-    val radiusKm: Int = 15,
+    val radiusKm: Int = 25,
     val organicOnly: Boolean = false,
     val minPrice: Double? = null,
     val maxPrice: Double? = null,

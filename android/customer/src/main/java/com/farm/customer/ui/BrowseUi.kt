@@ -174,7 +174,7 @@ fun FilterSheet(filters: FilterState, onApply: (FilterState) -> Unit, onReset: (
         Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
             FText("Filters & Sort", variant = TextVariant.H2)
             Section("Search Radius") {
-                listOf(5, 10, 25, 50).forEach { r -> Chip("$r km", draft.radiusKm == r, { draft = draft.copy(radiusKm = r) }) }
+                listOf(10, 25, 50, 100).forEach { r -> Chip("$r km", draft.radiusKm == r, { draft = draft.copy(radiusKm = r) }) }
             }
             Section("Sort By") {
                 SortOption.entries.forEach { o -> Chip(o.label, draft.sort == o, { draft = draft.copy(sort = o) }) }
