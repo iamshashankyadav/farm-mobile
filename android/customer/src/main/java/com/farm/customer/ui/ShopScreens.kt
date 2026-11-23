@@ -172,9 +172,11 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
                     }
                 }
             }
-            FarmCard(Modifier.fillMaxWidth()) {
-                FText("Photo verification", variant = TextVariant.Label, modifier = Modifier.padding(bottom = 8.dp))
-                VerifiedBadge(photo, compact = false)
+            if (photo != null) {
+                FarmCard(Modifier.fillMaxWidth()) {
+                    FText("Photo verification", variant = TextVariant.Label, modifier = Modifier.padding(bottom = 8.dp))
+                    VerifiedBadge(photo, compact = false)
+                }
             }
             FarmCard(Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.Top) {

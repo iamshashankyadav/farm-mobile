@@ -116,16 +116,16 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifie
 
 @Composable
 fun VerifiedBadge(photo: ProducePhoto?, compact: Boolean, modifier: Modifier = Modifier) {
-    val m = photoVerification(photo)
+    val m = photoVerification(photo) ?: return
     if (compact) {
-        Pill(m.shortLabel, hex(m.bg), hex(m.fg), modifier, border = hex(m.border), icon = if (m.isVerified) Icons.Rounded.Verified else Icons.Rounded.ErrorOutline)
+        Pill(m.shortLabel, hex(m.bg), hex(m.fg), modifier, border = hex(m.border), icon = when { m.pending -> Icons.Rounded.HourglassTop; m.isVerified -> Icons.Rounded.Verified; else -> Icons.Rounded.ErrorOutline })
     } else {
         Column(
             modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(hex(m.bg))
                 .border(1.dp, hex(m.border), RoundedCornerShape(10.dp)).padding(12.dp),
         ) {
             IconLabel(
-                if (m.isVerified) Icons.Rounded.Verified else Icons.Rounded.ErrorOutline, m.label,
+                when { m.pending -> Icons.Rounded.HourglassTop; m.isVerified -> Icons.Rounded.Verified; else -> Icons.Rounded.ErrorOutline }, m.label,
                 color = hex(m.fg), fontSize = 14, fontWeight = FontWeight.Bold,
             )
             Text(m.description, fontSize = 12.sp, color = hex(m.fg), modifier = Modifier.padding(top = 2.dp))
