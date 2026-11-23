@@ -121,13 +121,16 @@ network / VPN for the team VM. Android 8.0 or newer.
   (`.github/workflows/android-release.yml`). Add the four values above as repository secrets
   (`FARM_KEYSTORE_BASE64` holds the keystore file, base64-encoded) to sign them.
 
-## Push notifications (customer app)
+## Push notifications (both apps)
 
 The app registers its FCM token with `POST /notification/notifications/devices` after sign-in,
 deletes it with `DELETE /notification/notifications/devices/{token}` on sign-out, and opens the
 order or reservation named in the push data (`orderId` / `reservationId`).
 
-It needs the team's Firebase config: put `google-services.json` in `customer/` (it is gitignored,
+The delivery app does the same, and a route push (data `poolDate` and/or `poolId`) opens that
+day's route; its channel is high priority so a new route sounds at once.
+
+It needs the team's Firebase config: put each app's `google-services.json` in `customer/` and `delivery/` (it is gitignored,
 never commit it) and rebuild. Without the file the app builds and runs without push; the in-app
 inbox works either way. The backend currently sends pushes through the Expo push service only,
 which cannot deliver to an FCM token (see `NOTES.md`, Backend issues).
