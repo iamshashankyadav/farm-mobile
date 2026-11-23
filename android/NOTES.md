@@ -71,7 +71,7 @@ time.
 Problems in the backend found while building the apps. Each entry: the request, the response, and
 what we expected. The backend owner fixes them; the apps do not work around them.
 
-1. **Track returns another customer's delivery code.**
+1. **(Fixed in farm-backend#79, 2026-11-23: tracking is private)** **Track returned another customer's delivery code.**
    Request: `GET /logistics/orders/{orderId}/track` as any signed-in user.
    Response: `200` with `stop.otp` for that order's drop stop, even when the order belongs to
    someone else (the route only checks that the caller is signed in).
@@ -86,7 +86,7 @@ what we expected. The backend owner fixes them; the apps do not work around them
    Expected (issue #41, "real village and district"): `village` and `district` on the plot (and
    ideally the farmer's display name). Until then the app hides those rows.
 
-2. **The partner's route carries each customer's delivery code.**
+2. **(Fixed in farm-backend#79, 2026-11-23)** **The partner's route carried each customer's delivery code.**
    Request: `GET /logistics/my-route` as the delivery partner.
    Response: every DROP stop includes `otp`.
    Expected: no `otp` for the partner; the code is what the customer tells the partner at the door,

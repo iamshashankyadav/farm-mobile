@@ -73,7 +73,6 @@ import com.farm.customer.browse.formatRating
 import com.farm.customer.browse.ratingLabel
 import com.farm.customer.browse.ratingStars
 import com.farm.customer.browse.formatHarvestDate
-import com.farm.customer.browse.gradeMeta
 import com.farm.customer.browse.photoVerification
 import com.farm.customer.checkout.CartItem
 import com.farm.customer.checkout.CartStore
@@ -119,7 +118,6 @@ fun VerifiedBadge(photo: ProducePhoto?, compact: Boolean, modifier: Modifier = M
 @Composable
 fun ListingCard(listing: ProduceListing, onOpen: () -> Unit, onAdded: (ProduceListing) -> Unit) {
     val photo = listing.photos.firstOrNull()
-    val grade = gradeMeta(listing.grade)
     FarmCard(Modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(0.dp), onClick = onOpen) {
         Box(Modifier.fillMaxWidth().height(150.dp).background(FarmColors.PrimaryLight)) {
             if (photo != null && photo.url.isNotEmpty()) {
@@ -139,7 +137,6 @@ fun ListingCard(listing: ProduceListing, onOpen: () -> Unit, onAdded: (ProduceLi
                     FText(listing.cropName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = FarmColors.TextDark)
                     listing.variety?.let { FText(it, variant = TextVariant.Caption) }
                 }
-                if (listing.grade != null) Pill(grade.label, hex(grade.bg), hex(grade.fg))
             }
             FText("🏡 ${listing.farmName}", variant = TextVariant.Label, modifier = Modifier.padding(top = 6.dp))
             FarmRatingText(listing.farmRating, listing.farmRatingCount, Modifier.padding(top = 2.dp))
@@ -177,15 +174,10 @@ fun FilterSheet(filters: FilterState, onApply: (FilterState) -> Unit, onReset: (
         Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
             FText("Filters & Sort", variant = TextVariant.H2)
             Section("Search Radius") {
-                listOf(5, 10, 25, 50).forEach { r -> Chip("$r km", draft.radiusKm == r, { draft = draft.copy(radiusKm = r) }) }
+                listOf(10, 25, 50, 100).forEach { r -> Chip("$r km", draft.radiusKm == r, { draft = draft.copy(radiusKm = r) }) }
             }
             Section("Sort By") {
                 SortOption.entries.forEach { o -> Chip(o.label, draft.sort == o, { draft = draft.copy(sort = o) }) }
-            }
-            Section("Minimum Quality Grade") {
-                listOf("ALL", "A", "B", "C").forEach { g ->
-                    Chip(if (g == "ALL") "Any Grade" else "Grade $g & above", draft.minGrade == g, { draft = draft.copy(minGrade = g) })
-                }
             }
             Row(
                 Modifier.fillMaxWidth().padding(top = 18.dp).clip(RoundedCornerShape(10.dp)).background(FarmColors.Background)

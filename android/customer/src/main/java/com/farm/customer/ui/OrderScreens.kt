@@ -1,5 +1,7 @@
 package com.farm.customer.ui
 
+import com.farm.customer.orders.harvestCosts
+
 import com.farm.core.ui.StatusChip
 
 import com.farm.customer.checkout.CartStore
@@ -754,7 +756,7 @@ private fun RatingForm(orderId: String, onRated: () -> Unit) {
 
 // ─── Harvest ────────────────────────────────────────────────────────────────
 
-/** The harvest order of a reservation, or null while there is none (quality check not passed yet). */
+/** The harvest order of a reservation, or null while there is none yet (the harvest is not ready). */
 private suspend fun findHarvestOrder(reservationId: String): OrderDetail? {
     var cursor: String? = null
     repeat(5) {
@@ -766,7 +768,7 @@ private suspend fun findHarvestOrder(reservationId: String): OrderDetail? {
 }
 
 /**
- * Delivery or buy-back for a harvest that passed its quality check (#43). The choice is offered
+ * Delivery or buy-back for a ready harvest (#43). The choice is offered
  * only while land shows the reservation as FULFILLING and the harvest order has no option yet.
  * DELIVERY then follows the normal order, tracking and rating screens; BUYBACK shows the credit.
  */
@@ -842,7 +844,7 @@ fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -
                 }
             } else {
                 FText(
-                    if (stage == HarvestStage.CHOOSE && !choosing) "Your harvest passed its check. Getting your options ready…" else stage.text,
+                    if (stage == HarvestStage.CHOOSE && !choosing) "Your harvest is ready. Getting your options ready…" else stage.text,
                     color = FarmColors.TextLabel,
                 )
             }
@@ -856,8 +858,16 @@ fun HarvestScreen(reservationId: String, onBack: () -> Unit, onTrack: (String) -
                 }
             }
             if (choosing) {
-                OptionCard(option == "DELIVERY", "🚚  Deliver it to me", "Pooled doorstep delivery. The balance is paid when it arrives.") { option = "DELIVERY"; message = null }
-                OptionCard(option == "BUYBACK", "💰  Buy-back", "The farmer buys your harvest back and credits you 90% of its value at once. Nothing is delivered.") { option = "BUYBACK"; message = null }
+                val costs = o?.let { harvestCosts(it.total, it.balanceDue, it.deliveryFee) }
+                OptionCard(
+                    option == "DELIVERY", "🚚  Deliver it to me",
+                    "Pooled doorstep delivery." + (costs?.let { " You pay ${formatRupees(it.deliveryPayOnArrival)} when it arrives (balance plus delivery)." } ?: " The balance is paid when it arrives."),
+                ) { option = "DELIVERY"; message = null }
+                OptionCard(
+                    option == "BUYBACK", "💰  Buy-back",
+                    costs?.let { "You pay the balance of ${formatRupees(it.buybackPayNow)} now and are credited ${formatRupees(it.buybackCredit)} (90 % of the total) at once. Nothing is delivered." }
+                        ?: "The farmer buys your harvest back and credits you 90 % of its value at once. Nothing is delivered.",
+                ) { option = "BUYBACK"; message = null }
                 if (option == "DELIVERY") {
                     FarmCard(Modifier.fillMaxWidth()) {
                         FText("Delivery address", variant = TextVariant.Label)

@@ -1,5 +1,11 @@
 package com.farm.customer.ui
 
+import com.farm.customer.browse.rememberNearMe
+
+import com.farm.customer.browse.NearMeResult
+
+import com.farm.customer.browse.NEAR_ME
+
 import com.farm.core.ui.ProfileScreen
 
 import androidx.compose.ui.semantics.semantics
@@ -115,6 +121,15 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
     val cart by CartStore.cart.collectAsState()
     var filterOpen by remember { mutableStateOf(false) }
     var pickerOpen by remember { mutableStateOf(false) }
+    var nearMeNote by remember { mutableStateOf<String?>(null) }
+    // Search around the phone's own position: once on open (if allowed), or from the place picker.
+    val findMe = rememberNearMe(auto = vm.location.name != NEAR_ME) { result ->
+        when (result) {
+            is NearMeResult.Found -> { vm.changeLocation(result.place); nearMeNote = null }
+            NearMeResult.Denied -> nearMeNote = "Location is off for this app, so we search around ${vm.location.name}. Pick a place above or allow location."
+            NearMeResult.Unavailable -> nearMeNote = "Could not find your position (is GPS on?). Searching around ${vm.location.name}."
+        }
+    }
     val cartCount = cart.items.sumOf { it.qty }.toInt()
 
     Scaffold(
@@ -138,7 +153,8 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 FText(
-                                    if (vm.tab == HomeTab.PRODUCE) "Fresh from farms near ${vm.location.name}" else "Farm plots to reserve near ${vm.location.name}",
+                                    (if (vm.tab == HomeTab.PRODUCE) "Fresh from farms " else "Farm plots to reserve ") +
+                                        (if (vm.location.name == NEAR_ME) "near you" else "near ${vm.location.name}"),
                                     variant = TextVariant.Caption,
                                 )
                                 Text(" ▾", fontSize = 12.sp, color = FarmColors.Primary)
@@ -160,6 +176,7 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
                         if (auth.isAuthenticated) NotificationBell(nav.notifications, background = FarmColors.Surface)
                     }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(FarmColors.Border))
+                    nearMeNote?.let { FText(it, variant = TextVariant.Caption, modifier = Modifier.fillMaxWidth().background(FarmColors.WarningBg).padding(horizontal = 16.dp, vertical = 8.dp)) }
                     Box(Modifier.weight(1f)) {
                         if (vm.tab == HomeTab.PRODUCE) ProduceTab(vm, nav, onFilter = { filterOpen = true }) else LandTab(vm, nav)
                     }
@@ -187,7 +204,15 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
             title = { Text("Select Location") },
             text = {
                 Column {
-                    FText("Choose a district to explore nearby produce & plots:", variant = TextVariant.Caption, modifier = Modifier.padding(bottom = 10.dp))
+                    FText("Search around your position or a district:", variant = TextVariant.Caption, modifier = Modifier.padding(bottom = 10.dp))
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(8.dp))
+                            .background(if (vm.location.name == NEAR_ME) FarmColors.PrimaryLight else Color.Transparent)
+                            .clickable { pickerOpen = false; findMe() }.padding(12.dp),
+                    ) {
+                        Text("🎯 Use my location", modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, color = FarmColors.Primary)
+                        if (vm.location.name == NEAR_ME) Text("✓", color = FarmColors.Primary, fontWeight = FontWeight.Bold)
+                    }
                     POPULAR_DISTRICTS.forEach { d ->
                         val sel = vm.location.name == d.name
                         Row(

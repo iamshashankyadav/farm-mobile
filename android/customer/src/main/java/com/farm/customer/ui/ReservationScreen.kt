@@ -240,7 +240,7 @@ fun ReservationScreen(reservationId: String, onBack: () -> Unit, onHarvest: (Str
                     canChooseHarvest(r.status) -> FarmCard(
                         Modifier.fillMaxWidth(), background = FarmColors.PrimaryLight, border = BorderStroke(1.dp, FarmColors.PrimaryLight),
                     ) {
-                        FText("Your harvest passed its quality check", variant = TextVariant.H2, fontSize = 17.sp)
+                        FText("Your harvest is ready", variant = TextVariant.H2, fontSize = 17.sp)
                         FText("Have it delivered to you, or let the farmer buy it back.", variant = TextVariant.Caption)
                         FarmButton("Choose delivery or buy-back", { onHarvest(r.id) }, Modifier.fillMaxWidth().padding(top = 10.dp))
                     }
