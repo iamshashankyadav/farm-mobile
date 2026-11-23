@@ -286,14 +286,38 @@ private fun CenterState(emoji: String, title: String, subtitle: String?, action:
 private fun ProduceTab(vm: HomeViewModel, nav: HomeNav, onFilter: () -> Unit) {
     val favourites by LocalLists.favourites.collectAsState()
     val recent by LocalLists.recentSearches.collectAsState()
+    var suggestOpen by remember { mutableStateOf(true) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             SearchBar(
-                vm.filters.query, { vm.updateFilters(vm.filters.copy(query = it)) }, "Search produce, crop, or farm...", Modifier.weight(1f),
-                onSearch = LocalLists::addSearch,
+                vm.filters.query, { suggestOpen = true; vm.updateFilters(vm.filters.copy(query = it)) }, "Search produce, crop, or farm...", Modifier.weight(1f),
+                onSearch = { suggestOpen = false; LocalLists.addSearch(it) },
             )
             SmallAction("⚙ Filter", onFilter)
             SmallAction(if (vm.produceMap) "📋 List" else "🗺 Map") { vm.produceMap = !vm.produceMap }
+        }
+        // Google-style completions under the box: "apl" -> Apple. Tapping one fills the box.
+        val suggestions = vm.suggestions
+        if (suggestOpen && suggestions.isNotEmpty()) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clip(RoundedCornerShape(10.dp))
+                    .background(Color.White).border(1.dp, FarmColors.Border, RoundedCornerShape(10.dp)),
+            ) {
+                suggestions.forEach { word ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            suggestOpen = false
+                            vm.updateFilters(vm.filters.copy(query = word))
+                            LocalLists.addSearch(word)
+                        }.padding(horizontal = 12.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("🔍", fontSize = 12.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(word, fontSize = 14.sp, color = FarmColors.TextMuted)
+                    }
+                }
+            }
         }
         ChipRow {
             Chip("🌱 All", vm.filters.crop == null, { vm.toggleCrop(null) })

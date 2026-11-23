@@ -123,7 +123,7 @@ fun needsRefetch(prev: FilterState, next: FilterState): Boolean =
 
 /** The device-side filters: the text box and "favourite farms only". */
 fun applyLocalFilters(items: List<ProduceListing>, f: FilterState, favouriteFarmIds: Set<String>): List<ProduceListing> =
-    items.filter { matchesQuery(it, f.query) && (!f.favouritesOnly || it.farmId in favouriteFarmIds) }
+    narrowByQuery(items, f.query).filter { !f.favouritesOnly || it.farmId in favouriteFarmIds }
 
 // ─── Formatting ─────────────────────────────────────────────────────────────
 

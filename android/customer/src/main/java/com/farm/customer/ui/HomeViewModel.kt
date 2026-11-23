@@ -15,6 +15,8 @@ import com.farm.customer.browse.LocationCoords
 import com.farm.customer.browse.POPULAR_DISTRICTS
 import com.farm.customer.browse.ProduceListing
 import com.farm.customer.browse.matchesQuery
+import com.farm.customer.browse.produceVocabulary
+import com.farm.customer.browse.suggestWords
 import com.farm.customer.browse.needsRefetch
 import com.farm.core.api.CatalogApi
 import com.farm.core.api.CropOut
@@ -53,6 +55,10 @@ class HomeViewModel : ViewModel() {
         private set
     var produceToast by mutableStateOf<String?>(null)
         private set
+
+    /** Words that complete what is typed in the produce search ("apl" -> "Apple"), best first. */
+    val suggestions: List<String>
+        get() = suggestWords(filters.query, produceVocabulary(allListings, crops.map { it.name })).map { it.text }
 
     /** The loaded results, narrowed by the text box (the server applies every other filter). */
     val listings: List<ProduceListing>
