@@ -73,6 +73,7 @@ import com.farm.delivery.route.dialUri
 import com.farm.delivery.route.open
 import com.farm.delivery.route.routeLengthM
 import com.farm.delivery.route.withStop
+import com.farm.delivery.route.routeLine
 import com.farm.delivery.route.routeStops
 import com.farm.delivery.route.routeSummary
 import com.farm.core.api.LogisticsApi
@@ -222,7 +223,7 @@ fun RouteScreen(dateParam: String?, onBack: (() -> Unit)?, onHome: () -> Unit) {
                     }
                     else -> {
                         item {
-                            RouteMap(stops, selectedStopId ?: summary.next?.id) { selectedStopId = it }
+                            RouteMap(stops, routeLine(pool, stops), selectedStopId ?: summary.next?.id) { selectedStopId = it }
                         }
                         item { RouteProgress(stops.size, summary.done, routeLengthM(stops)) }
                         item { TrackingCard(pings.isTracking, pings.pingCount, pings.lastPingTime, pings.error) }
@@ -302,7 +303,7 @@ private fun SkipDialog(stop: RouteStop, onDismiss: () -> Unit, onSkip: (String) 
 
 /** The stops on OpenStreetMap tiles in driving order, pickups green and drops blue. */
 @Composable
-private fun RouteMap(stops: List<RouteStop>, selectedId: String?, onSelect: (String) -> Unit) {
+private fun RouteMap(stops: List<RouteStop>, line: List<Pair<Double, Double>>, selectedId: String?, onSelect: (String) -> Unit) {
     val first = stops.first()
     TileMap(
         pins = stops.map {
@@ -319,7 +320,7 @@ private fun RouteMap(stops: List<RouteStop>, selectedId: String?, onSelect: (Str
         centerLng = first.lng,
         selectedKey = selectedId,
         onSelect = onSelect,
-        path = stops.map { it.lat to it.lng },
+        path = line,
         description = "Route map with ${stops.size} stops",
         modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(12.dp)),
     )
