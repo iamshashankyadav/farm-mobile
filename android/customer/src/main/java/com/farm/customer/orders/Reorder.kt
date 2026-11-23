@@ -68,8 +68,7 @@ fun canReorder(orderType: String?, items: List<OrderItem>): Boolean =
 fun orderNextStep(status: String): String? = when (status) {
     "PLACED" -> "Next: your payment is confirmed (a few seconds)."
     "CONFIRMED" -> "Next: the farmer packs your order."
-    "PACKED" -> "Next: a quality check grades the produce."
-    "QC_PASSED" -> "Next: the order is made ready for dispatch."
+    "PACKED" -> "Next: a delivery partner collects it."
     "READY_FOR_DISPATCH" -> "Next: it is added to a delivery route."
     "POOLED" -> "Next: the delivery partner picks it up from the farm."
     "IN_TRANSIT" -> "Next: keep your delivery code ready for the partner."

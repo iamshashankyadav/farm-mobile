@@ -58,6 +58,8 @@ android {
 
 dependencies {
     implementation(project(":core"))
+    implementation(libs.play.services.location)
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
     testImplementation(libs.junit)

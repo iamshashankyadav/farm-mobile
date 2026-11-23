@@ -75,7 +75,7 @@ data class LandFilterState(
     val season: String? = null,
     val crop: String? = null,
     val soilType: String? = null,
-    val radiusKm: Int = 25,
+    val radiusKm: Int = 50,
     val minAcres: Double? = null,
     val maxAcres: Double? = null,
     val sort: LandSortOption = LandSortOption.DISTANCE,

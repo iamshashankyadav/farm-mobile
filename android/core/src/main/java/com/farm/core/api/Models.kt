@@ -11,7 +11,6 @@ object Roles {
     const val CUSTOMER = "customer"
     const val FARMER = "farmer"
     const val DELIVERY = "delivery"
-    const val INSPECTOR = "inspector"
     const val ADMIN = "admin"
 }
 
@@ -76,7 +75,6 @@ data class ListingSearchProperties(
     val pricePerUnit: Double = 0.0,
     val qtyAvailable: Double = 0.0,
     val harvestDate: String = "",
-    val grade: String? = null,
     val isOrganic: Boolean = false,
     val description: String? = null,
     val distanceM: Double = 0.0,
@@ -110,7 +108,6 @@ data class ListingOut(
     val pricePerUnit: Double = 0.0,
     val qtyAvailable: Double = 0.0,
     val harvestDate: String = "",
-    val grade: String? = null,
     val isOrganic: Boolean = false,
     val description: String? = null,
     val district: String = "",

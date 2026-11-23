@@ -14,7 +14,7 @@ class BrowseTest {
          "features":[
           {"type":"Feature","id":"l1","geometry":{"type":"Point","coordinates":[81.28,21.19]},
            "properties":{"id":"l1","farmId":"f1","farmName":"Green Acres","cropId":"tomato","cropName":"Tomato",
-             "unit":"kg","pricePerUnit":32.5,"qtyAvailable":40,"harvestDate":"2026-11-20","grade":"A",
+             "unit":"kg","pricePerUnit":32.5,"qtyAvailable":40,"harvestDate":"2026-11-20",
              "distanceM":2400,"district":"Durg","village":"Patan","farmRating":4.25,"farmRatingCount":12,
              "mediaIds":["m1"],"someNewField":true}},
           {"type":"Feature","id":"l2","geometry":null,
@@ -57,7 +57,7 @@ class BrowseTest {
     @Test fun onlyTheTextQueryStaysOnTheDevice() {
         val base = FilterState()
         assertFalse(needsRefetch(base, base.copy(query = "tom")))
-        assertTrue(needsRefetch(base, base.copy(minGrade = "B")))
+        assertTrue(needsRefetch(base, base.copy(organicOnly = true)))
         assertTrue(needsRefetch(base, base.copy(sort = SortOption.NEWEST)))
         assertTrue(needsRefetch(base, base.copy(maxPrice = 50.0)))
     }
