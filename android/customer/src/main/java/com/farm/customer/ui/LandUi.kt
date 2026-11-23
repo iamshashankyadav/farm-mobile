@@ -1,5 +1,7 @@
 package com.farm.customer.ui
 
+import com.farm.customer.browse.NEAR_ME
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -149,6 +151,7 @@ fun PlotMapView(
         PlotTileMap(
             plots, location.latitude, location.longitude, selected?.id,
             onSelect = { selectedId = it.id }, onSearchArea = onSearchArea, modifier = Modifier.weight(1f),
+            meTitle = if (location.name == NEAR_ME) "You are here" else "Searching around ${location.name}",
         )
         if (selected != null) {
             FarmCard(Modifier.fillMaxWidth().padding(12.dp)) {

@@ -1,5 +1,7 @@
 package com.farm.customer.ui
 
+import com.farm.core.ui.meMarker
+
 import com.farm.core.ui.FarmColors
 
 import android.graphics.Color as AndroidColor
@@ -50,6 +52,8 @@ fun PlotTileMap(
     onSelect: (PlotItem) -> Unit,
     onSearchArea: (List<Double>) -> Unit,
     modifier: Modifier = Modifier,
+    /** Title of the blue pin at the search centre (the person's position, or the chosen place). */
+    meTitle: String = "You are here",
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -94,6 +98,7 @@ fun PlotTileMap(
             update = { map ->
                 map.overlays.removeAll { it is Polygon || it is Marker }
                 plots.forEach { plot -> map.overlays.add(plotOverlay(map, plot, plot.id == selectedId) { select(plot) }) }
+                map.overlays.add(meMarker(map, centerLat, centerLng, meTitle))
                 map.invalidate()
             },
         )

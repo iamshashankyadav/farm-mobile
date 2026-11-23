@@ -206,6 +206,28 @@ object LogisticsApi {
         Http.post("/logistics/location", Http.encode(LocationPingIn(lat, lng, poolId, speed, heading, accuracy, recordedAt))).ok
     }.getOrDefault(false)
 
+    /** Routes offered to this partner that are still open (nearest offer first from the server). */
+    suspend fun myOffers(): List<RouteOffer> {
+        val res = Http.get("/logistics/offers/mine")
+        if (!res.ok) throw ApiException(errorMessage(res, "Could not load route offers"), res.error()?.code ?: "REQUEST_FAILED", res.status)
+        return res.decode()
+    }
+
+    /**
+     * Takes an offered route. The first partner to accept gets it; a later one gets an
+     * [ApiException] with code POOL_TAKEN (409). Returns the route on success.
+     */
+    suspend fun acceptOffer(poolId: String): Pool {
+        val res = Http.post("/logistics/offers/${Http.enc(poolId)}/accept", "{}")
+        if (!res.ok) throw ApiException(errorMessage(res, "Could not accept the route"), res.error()?.code ?: "REQUEST_FAILED", res.status)
+        return res.decode()
+    }
+
+    suspend fun declineOffer(poolId: String) {
+        val res = Http.post("/logistics/offers/${Http.enc(poolId)}/decline", "{}")
+        if (!res.ok && res.status != 404) throw ApiException(errorMessage(res, "Could not decline the route"), res.error()?.code ?: "REQUEST_FAILED", res.status)
+    }
+
     /** Live position of an order's delivery. null while the order is not in a pool yet. */
     suspend fun track(orderId: String): Track? {
         val res = Http.get("/logistics/orders/${Http.enc(orderId)}/track")
