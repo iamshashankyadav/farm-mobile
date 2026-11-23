@@ -80,7 +80,6 @@ import com.farm.customer.reservation.depositConfirmed
 import com.farm.customer.reservation.depositErrorMessage
 import com.farm.customer.reservation.isClosed
 import com.farm.customer.reservation.nextStepText
-import com.farm.customer.reservation.photoBadge
 import com.farm.customer.reservation.reservationStage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -360,14 +359,6 @@ private fun CropPhoto(mediaId: String) {
             url != null -> AsyncImage(model = url, contentDescription = "Crop photo", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             failed -> FText("Photo unavailable", variant = TextVariant.Caption)
             else -> CircularProgressIndicator(Modifier.size(24.dp), color = FarmColors.Primary, strokeWidth = 2.dp)
-        }
-        if (m != null) {
-            Pill(
-                (if (m.isGeoVerified) "✓ " else "! ") + photoBadge(m.isGeoVerified),
-                if (m.isGeoVerified) FarmColors.PrimaryLight else FarmColors.WarningBg,
-                if (m.isGeoVerified) FarmColors.Primary else FarmColors.Warning,
-                Modifier.align(Alignment.TopStart).padding(8.dp),
-            )
         }
     }
 }

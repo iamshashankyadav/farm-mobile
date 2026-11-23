@@ -106,4 +106,3 @@ fun cropStageLabel(stage: String): StageLabel = when (stage) {
 fun cropName(cropId: String): String = cropId.replace('_', ' ').replace('-', ' ').trim().lowercase().replaceFirstChar { it.uppercase() }
 
 /** Badge text for a crop photo: only a photo the media service verified on site gets the green badge. */
-fun photoBadge(isGeoVerified: Boolean): String = if (isGeoVerified) "Verified on site" else "Unverified"

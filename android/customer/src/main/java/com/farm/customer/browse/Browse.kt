@@ -155,30 +155,6 @@ fun formatHarvestDate(date: String): String = runCatching {
     "${d.dayOfMonth} ${MONTHS[d.monthValue - 1]} ${d.year}"
 }.getOrDefault(date)
 
-data class PhotoVerification(
-    val isVerified: Boolean, val label: String, val shortLabel: String,
-    val bg: String, val fg: String, val border: String, val description: String,
-)
-
-/** "Photos with verified badge": geo-verified means the photo was taken on the farm. */
-fun photoVerification(photo: ProducePhoto?): PhotoVerification {
-    if (photo == null) {
-        return PhotoVerification(false, "Photo Unverified", "Unverified", "#E6E9EB", "#4B5258", "#C9CFD4", "No GPS metadata found in photo")
-    }
-    if (photo.isGeoVerified) {
-        val dist = photo.distanceM?.let { " (${formatDistance(it)} from farm centroid)" } ?: ""
-        return PhotoVerification(true, "✓ Verified Farm Photo", "✓ Verified", "#E3F1E9", "#155C3A", "#1D7A4D", "GPS verified: Photo taken at the farm location$dist")
-    }
-    val desc = when {
-        photo.geoStatus == "TOO_FAR" -> "Photo taken too far from farm location" +
-            (photo.distanceM?.takeIf { it > 0 }?.let { " (${formatDistance(it)} away)" } ?: "")
-        photo.geoStatus == "NO_GPS" -> "Photo lacks GPS EXIF metadata"
-        photo.rejectReason != null -> photo.rejectReason
-        else -> "Photo could not be verified at farm coordinates"
-    }
-    return PhotoVerification(false, "⚠ Unverified Photo", "⚠ Unverified", "#FBEAE7", "#C2412D", "#C2412D", desc)
-}
-
 fun cropEmoji(cropId: String): String = when (cropId) {
     "tomato" -> "🍅"; "spinach" -> "🥬"; "onion" -> "🧅"; "potato" -> "🥔"; "mango" -> "🥭"; "okra" -> "🌿"; "carrot" -> "🥕"
     else -> "🥕"

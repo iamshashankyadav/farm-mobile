@@ -133,7 +133,6 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
         }
         return
     }
-    val photo = l.photos.firstOrNull()
     val inCart = cart.items.any { it.listingId == l.id }
 
     Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
@@ -147,20 +146,15 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
                     if (l.isOrganic) Pill("🌱 Organic", FarmColors.Primary, Color.White, Modifier.align(Alignment.TopEnd).padding(10.dp), fontSize = 12)
                 }
             } else {
-                // Every photo of the listing, each marked verified on the farm or "Unverified".
+                // Every photo of the listing.
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(l.photos, key = { it.id }) { p ->
                         Box(Modifier.fillParentMaxWidth(if (l.photos.size == 1) 1f else 0.85f).height(230.dp).clip(RoundedCornerShape(14.dp)).background(FarmColors.PrimaryLight)) {
                             AsyncImage(p.url, "${l.cropName} photo", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                            VerifiedBadge(p, compact = true, modifier = Modifier.align(Alignment.TopStart).padding(10.dp))
                             if (l.isOrganic) Pill("🌱 Organic", FarmColors.Primary, Color.White, Modifier.align(Alignment.TopEnd).padding(10.dp), fontSize = 12)
                         }
                     }
                 }
-            }
-            FarmCard(Modifier.fillMaxWidth()) {
-                FText("Photo verification", variant = TextVariant.Label, modifier = Modifier.padding(bottom = 8.dp))
-                VerifiedBadge(photo, compact = false)
             }
             FarmCard(Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.Top) {
