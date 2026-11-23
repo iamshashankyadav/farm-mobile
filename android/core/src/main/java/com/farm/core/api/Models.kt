@@ -265,6 +265,8 @@ data class Pool(
     val kmSaved: Double? = null,
     val totalKm: Double? = null,
     val stops: List<Stop> = emptyList(),
+    /** The road line through the stops, [lat, lng] pairs; null when the routing engine had none. */
+    val routePath: List<List<Double>>? = null,
 )
 
 @Serializable

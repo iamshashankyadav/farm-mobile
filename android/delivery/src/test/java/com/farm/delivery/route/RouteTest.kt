@@ -102,4 +102,18 @@ class RouteTest {
         assertEquals(1112.0, routeLengthM(listOf(a, b)), 5.0)
         assertEquals(0.0, routeLengthM(listOf(a)), 0.0)
     }
+
+    @Test
+    fun mapDrawsTheRoadPathWhenTheBackendSendsOne() {
+        val stops = listOf(toRouteStop(stop()))
+        val pool = Pool(id = "p1", routePath = listOf(listOf(21.0, 81.0), listOf(21.1, 81.1), listOf(21.2, 81.2)))
+        assertEquals(listOf(21.0 to 81.0, 21.1 to 81.1, 21.2 to 81.2), routeLine(pool, stops))
+    }
+
+    @Test
+    fun mapFallsBackToStraightLinesBetweenStopsWithoutARoadPath() {
+        val stops = listOf(toRouteStop(stop(id = "a")), toRouteStop(stop(id = "b", seq = 2)))
+        assertEquals(listOf(21.25 to 81.63, 21.25 to 81.63), routeLine(Pool(id = "p1"), stops))
+        assertEquals(listOf(21.25 to 81.63, 21.25 to 81.63), routeLine(null, stops))
+    }
 }

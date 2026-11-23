@@ -85,6 +85,7 @@ import com.farm.delivery.route.mapsUrl
 import com.farm.delivery.route.markStopDone
 import com.farm.delivery.route.open
 import com.farm.delivery.route.routeLengthM
+import com.farm.delivery.route.routeLine
 import com.farm.delivery.route.routeStops
 import com.farm.delivery.route.routeSummary
 import com.farm.delivery.route.withStop
@@ -275,7 +276,7 @@ fun RouteScreen(dateParam: String?, onBack: (() -> Unit)?, onHome: () -> Unit) {
                         toast?.let { item { Banner("✓ $it", FarmColors.PrimaryLight, FarmColors.PrimaryDark, borderColor = FarmColors.Border) } }
                         actionError?.let { item { Banner("⚠️ $it", FarmColors.ErrorBg, FarmColors.Error) } }
                         item {
-                            RouteMap(stops, summary.next, pings, selectedStopId ?: summary.next?.id) { selectedStopId = it }
+                            RouteMap(stops, routeLine(pool, stops), summary.next, pings, selectedStopId ?: summary.next?.id) { selectedStopId = it }
                         }
                         item {
                             RouteOverview(
@@ -360,11 +361,11 @@ private fun SkipDialog(stop: RouteStop, onDismiss: () -> Unit, onSkip: (String) 
 }
 
 /**
- * The stops on OpenStreetMap tiles in driving order: 📦 green pickups, 🏠 orange drops (grey once
+ * The stops on OpenStreetMap tiles in driving order along the road [line]: 📦 green pickups, 🏠 orange drops (grey once
  * done), your position as a blue dot with a dashed line to the next stop.
  */
 @Composable
-private fun RouteMap(stops: List<RouteStop>, next: RouteStop?, tracking: TrackingState, selectedId: String?, onSelect: (String) -> Unit) {
+private fun RouteMap(stops: List<RouteStop>, line: List<Pair<Double, Double>>, next: RouteStop?, tracking: TrackingState, selectedId: String?, onSelect: (String) -> Unit) {
     val first = stops.first()
     val me = if (tracking.lat != null && tracking.lng != null) mePin(tracking.lat, tracking.lng) else null
     TileMap(
@@ -380,7 +381,7 @@ private fun RouteMap(stops: List<RouteStop>, next: RouteStop?, tracking: Trackin
         centerLng = first.lng,
         selectedKey = selectedId,
         onSelect = onSelect,
-        path = stops.map { it.lat to it.lng },
+        path = line,
         leadIn = if (me != null && next != null) listOf(me.lat to me.lng, next.lat to next.lng) else emptyList(),
         description = "Route map with ${stops.size} stops",
         modifier = Modifier.fillMaxWidth().height(230.dp).clip(RoundedCornerShape(12.dp)),
