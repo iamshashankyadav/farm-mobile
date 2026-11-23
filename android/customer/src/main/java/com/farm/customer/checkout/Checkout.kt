@@ -3,6 +3,7 @@ package com.farm.customer.checkout
 import com.farm.core.api.Checkout
 import com.farm.core.api.CheckoutRequest
 import com.farm.core.api.DeliveryAddress
+import com.farm.core.api.DeliveryOptions
 import com.farm.core.api.GeoPoint
 import com.farm.core.api.Http
 import com.farm.core.api.NetworkException
@@ -96,6 +97,30 @@ fun Cart.toOrderItems(): List<OrderItemIn> = items.map { OrderItemIn(it.listingI
 
 /** Flat delivery fee per farm order that the backend charges (order service setting). */
 const val DELIVERY_FEE_PER_ORDER = 20.0
+
+// ─── Delivery mode: deliver now, or "I can wait" (shared-delivery batch) ────────────────────
+
+/** Put on a route as soon as the farmer packs the order. */
+const val MODE_IMMEDIATE = "IMMEDIATE"
+
+/** The customer accepts a later arrival: the order waits for the daily batch, where orders from nearby homes share one partner. */
+const val MODE_FLEXIBLE = "FLEXIBLE"
+
+/** Fee of a FLEXIBLE order. Only a fallback: the real fees come from GET /order/orders/delivery-options. */
+const val DELIVERY_FEE_FLEXIBLE = 10.0
+
+/** The fee per farm order for [mode]: what the server reported, else the built-in fallback. */
+fun feeFor(mode: String, options: DeliveryOptions? = null): Double =
+    options?.options?.firstOrNull { it.mode == mode }?.feePerOrder
+        ?: if (mode == MODE_FLEXIBLE) DELIVERY_FEE_FLEXIBLE else DELIVERY_FEE_PER_ORDER
+
+/** "10:00" -> "10:00 am", "15:05" -> "3:05 pm". */
+fun clock12(hhmm: String): String {
+    val parts = hhmm.split(":")
+    val h = parts.getOrNull(0)?.toIntOrNull() ?: return hhmm
+    val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+    return "${if (h % 12 == 0) 12 else h % 12}:${m.toString().padStart(2, '0')} ${if (h < 12) "am" else "pm"}"
+}
 
 /** One farm's order before paying: its items, the delivery fee and what that order costs. */
 data class FarmCharge(val farmId: String, val farmName: String, val items: Double, val deliveryFee: Double) {
@@ -287,15 +312,15 @@ object RealCheckoutApi : CheckoutApi {
 }
 
 /** Same cart and address give the same fingerprint; changing either starts a new attempt. */
-fun fingerprint(cart: Cart, address: DeliveryAddress, notes: String?): String =
+fun fingerprint(cart: Cart, address: DeliveryAddress, notes: String?, mode: String = MODE_IMMEDIATE, feePerFarm: Double = 0.0): String =
     cart.toOrderItems().sortedBy { it.listingId }.joinToString { "${it.listingId}:${it.qty}" } +
-        "|" + Http.encode(address) + "|" + (notes ?: "")
+        "|" + Http.encode(address) + "|" + (notes ?: "") + "|" + mode + "|" + feePerFarm
 
 /**
  * Runs the checkout and keeps the Idempotency-Key and payment intent between taps, so a retry
  * after a network error can never create a second order:
  *  - same cart + same address -> same key and intent (the server returns the first result)
- *  - cart or address changed   -> new key and a new payment intent
+ *  - cart, address or delivery mode changed -> new key and a new payment intent
  *  - payment declined / success -> the attempt is over; the next one starts fresh
  */
 class CheckoutSession(
@@ -308,19 +333,26 @@ class CheckoutSession(
 
     val currentKey: String? get() = attempt?.key
 
-    suspend fun submit(cart: Cart, address: DeliveryAddress, notes: String?): ApiResult<Checkout> {
-        val print = fingerprint(cart, address, notes)
+    /** [mode] is MODE_IMMEDIATE or MODE_FLEXIBLE; [fee] is that mode's delivery fee per farm (default: the session's). */
+    suspend fun submit(
+        cart: Cart,
+        address: DeliveryAddress,
+        notes: String?,
+        mode: String = MODE_IMMEDIATE,
+        fee: Double = feePerFarm,
+    ): ApiResult<Checkout> {
+        val print = fingerprint(cart, address, notes, mode, fee)
         val current = attempt?.takeIf { it.fingerprint == print } ?: Attempt(newKey(), null, print).also { attempt = it }
 
         if (current.intentId == null) {
-            when (val intent = api.createPaymentIntent(cart.estimateTotal(feePerFarm))) {
+            when (val intent = api.createPaymentIntent(cart.estimateTotal(fee))) {
                 is ApiResult.Err -> return intent
                 is ApiResult.Ok -> current.intentId = intent.data
             }
         }
         val result = api.placeOrder(
             current.key,
-            CheckoutRequest(cart.toOrderItems(), address, paymentIntentId = current.intentId!!, notes = notes),
+            CheckoutRequest(cart.toOrderItems(), address, paymentIntentId = current.intentId!!, notes = notes, deliveryMode = mode),
         )
         when (result) {
             is ApiResult.Ok -> attempt = null

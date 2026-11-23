@@ -55,6 +55,29 @@ class ReorderTest {
         assertNull(orderNextStep("CANCELLED"))
     }
 
+    @Test fun aSharedDeliveryOrderSaysWhenItsBatchRuns() {
+        val now = java.time.Instant.parse("2026-11-24T02:00:00Z") // 07:30 in India
+        assertEquals("today 10:00 am", batchWhen("2026-11-24T10:00:00+05:30", now))
+        assertEquals("tomorrow 10:00 am", batchWhen("2026-11-25T10:00:00+05:30", now))
+        assertEquals("Sat, 28 Nov, 10:00 am", batchWhen("2026-11-28T10:00:00+05:30", now))
+        assertNull(batchWhen("not a time", now))
+    }
+
+    @Test fun onlyAnOrderThatHasNotLeftWaitsForTheBatch() {
+        assertTrue(waitsForBatch("READY_FOR_DISPATCH", "FLEXIBLE"))
+        assertTrue(waitsForBatch("CONFIRMED", "FLEXIBLE"))
+        assertFalse(waitsForBatch("POOLED", "FLEXIBLE"))
+        assertFalse(waitsForBatch("READY_FOR_DISPATCH", "IMMEDIATE"))
+    }
+
+    @Test fun nextStepOfASharedDeliveryOrderMentionsTheBatch() {
+        val line = orderNextStep("READY_FOR_DISPATCH", "FLEXIBLE", "2999-01-01T10:00:00+05:30")
+        assertTrue(line!!.startsWith("Shared delivery: it leaves in our batch"))
+        assertEquals("Next: it is added to a delivery route.", orderNextStep("READY_FOR_DISPATCH"))
+        assertEquals("Next: the delivery partner picks it up from the farm.", orderNextStep("POOLED", "FLEXIBLE", null))
+        assertTrue(orderNextStep("PACKED", "FLEXIBLE", null)!!.contains("next daily batch"))
+    }
+
     @Test fun recentSearchesDedupeAndCap() {
         var list = emptyList<String>()
         list = addRecentSearch(list, "tomato")

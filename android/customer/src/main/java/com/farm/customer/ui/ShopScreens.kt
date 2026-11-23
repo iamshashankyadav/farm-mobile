@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -90,6 +91,13 @@ import com.farm.customer.checkout.CartStore
 import com.farm.customer.checkout.CheckoutError
 import com.farm.customer.checkout.CheckoutSession
 import com.farm.customer.checkout.DELIVERY_FEE_PER_ORDER
+import com.farm.customer.checkout.MODE_FLEXIBLE
+import com.farm.customer.checkout.MODE_IMMEDIATE
+import com.farm.customer.checkout.clock12
+import com.farm.customer.checkout.feeFor
+import com.farm.core.api.DeliveryOptions
+import com.farm.customer.orders.batchWhen
+import androidx.compose.material3.RadioButton
 import com.farm.customer.checkout.RealCheckoutApi
 import com.farm.customer.checkout.breakdown
 import com.farm.customer.checkout.estimateTotal
@@ -268,7 +276,10 @@ fun CartScreen(onBack: () -> Unit, onBrowse: () -> Unit, onCheckout: () -> Unit)
                     FText("Subtotal ${formatRupees(g.subtotal)}", variant = TextVariant.Label, modifier = Modifier.align(Alignment.End).padding(top = 10.dp))
                 }
             }
-            FText("One order is placed per farm; delivery is ${formatRupees(DELIVERY_FEE_PER_ORDER)} per order.", variant = TextVariant.Caption)
+            FText(
+                "One order is placed per farm; delivery is ${formatRupees(DELIVERY_FEE_PER_ORDER)} per order, or less if you choose shared delivery at checkout.",
+                variant = TextVariant.Caption,
+            )
         }
         Row(Modifier.fillMaxWidth().background(Color.White).navigationBarsPadding().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -285,13 +296,18 @@ fun CheckoutScreen(onBack: () -> Unit, onCart: () -> Unit, onLogin: () -> Unit, 
     val cart by CartStore.cart.collectAsState()
     val scope = rememberCoroutineScope()
     val session = remember { CheckoutSession(RealCheckoutApi, DELIVERY_FEE_PER_ORDER) }
+    var mode by remember { mutableStateOf(MODE_IMMEDIATE) }
+    // fees and the batch time come from the order service; the built-in fees apply until it answers (or if it is down)
+    var options by remember { mutableStateOf<DeliveryOptions?>(null) }
+    LaunchedEffect(Unit) { load { OrderApi.deliveryOptions() }.onSuccess { options = it } }
+    val fee = feeFor(mode, options)
     var form by remember { mutableStateOf(AddressForm()) }
     var notes by remember { mutableStateOf("") }
     var errors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<CheckoutError?>(null) }
     val groups = cart.groupByFarm()
-    val breakdown = cart.breakdown(DELIVERY_FEE_PER_ORDER)
+    val breakdown = cart.breakdown(fee)
     val total = breakdown.total
 
     fun set(field: String, update: AddressForm.(String) -> AddressForm): (String) -> Unit = { v ->
@@ -305,7 +321,7 @@ fun CheckoutScreen(onBack: () -> Unit, onCart: () -> Unit, onLogin: () -> Unit, 
             is AddressResult.Invalid -> errors = r.errors
             is AddressResult.Ok -> scope.launch {
                 submitting = true
-                when (val res = session.submit(cart, r.value, notes.trim().ifEmpty { null })) {
+                when (val res = session.submit(cart, r.value, notes.trim().ifEmpty { null }, mode, fee)) {
                     is ApiResult.Ok -> {
                         CartStore.lastCheckout = res.data
                         CartStore.clear()
@@ -345,10 +361,11 @@ fun CheckoutScreen(onBack: () -> Unit, onCart: () -> Unit, onLogin: () -> Unit, 
                 }
                 HorizontalDivider(Modifier.padding(vertical = 8.dp), color = FarmColors.Border)
                 SummaryLine("Items", formatRupees(breakdown.items))
-                SummaryLine("Delivery (${breakdown.farms.size} × ${formatRupees(DELIVERY_FEE_PER_ORDER)})", formatRupees(breakdown.delivery))
+                SummaryLine("Delivery (${breakdown.farms.size} × ${formatRupees(fee)})", formatRupees(breakdown.delivery))
                 SummaryLine("To pay", formatRupees(breakdown.total), bold = true)
                 FText("Payment is simulated: no real money is taken.", variant = TextVariant.Caption, modifier = Modifier.padding(top = 4.dp))
             }
+            DeliveryChoiceCard(mode, { mode = it; error = null }, options)
             FarmCard(Modifier.fillMaxWidth()) {
                 FText("Delivery address", variant = TextVariant.H2, fontSize = 18.sp)
                 FarmInput(form.line1, set("line1") { copy(line1 = it) }, label = "Street address", error = errors["line1"])
@@ -364,6 +381,53 @@ fun CheckoutScreen(onBack: () -> Unit, onCart: () -> Unit, onLogin: () -> Unit, 
             FarmButton(
                 if (error is CheckoutError.PaymentFailed) "Try again · ${formatRupees(total)}" else "Place order · ${formatRupees(total)}",
                 ::placeOrder, Modifier.fillMaxWidth(), loading = submitting, enabled = !submitting,
+            )
+        }
+    }
+}
+
+/** Deliver as soon as possible, or "I can wait": the order joins the daily shared-delivery batch and costs less. */
+@Composable
+private fun DeliveryChoiceCard(mode: String, onMode: (String) -> Unit, options: DeliveryOptions?) {
+    val clock = clock12(options?.batchTime ?: "10:00")
+    val choices = listOf(
+        Triple(MODE_IMMEDIATE, "Deliver as soon as possible", "On a delivery route as soon as the farmer packs your order."),
+        Triple(
+            MODE_FLEXIBLE,
+            "I can wait: shared delivery",
+            "Your order joins our daily $clock batch, where orders from nearby homes share one delivery partner. It arrives later, and costs less.",
+        ),
+    )
+    FarmCard(Modifier.fillMaxWidth()) {
+        FText("How soon do you need it?", variant = TextVariant.H2, fontSize = 18.sp)
+        Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            choices.forEach { (value, title, body) ->
+                val selected = mode == value
+                FarmCard(
+                    Modifier.fillMaxWidth(),
+                    background = if (selected) FarmColors.PrimaryLight else Color.White,
+                    border = BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) FarmColors.Primary else FarmColors.Border),
+                    padding = PaddingValues(12.dp),
+                    onClick = { onMode(value) },
+                ) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        RadioButton(selected = selected, onClick = { onMode(value) })
+                        Column(Modifier.weight(1f).padding(start = 4.dp, top = 12.dp)) {
+                            Row {
+                                FText(title, variant = TextVariant.Label, modifier = Modifier.weight(1f))
+                                FText("${formatRupees(feeFor(value, options))} per farm", variant = TextVariant.Label)
+                            }
+                            FText(body, variant = TextVariant.Caption)
+                        }
+                    }
+                }
+            }
+        }
+        val next = options?.nextBatchAt?.let { batchWhen(it) }
+        if (mode == MODE_FLEXIBLE && next != null) {
+            FText(
+                "Earliest shared run: $next. Orders the farmer packs after a run go out in the next one.",
+                variant = TextVariant.Caption, modifier = Modifier.padding(top = 8.dp),
             )
         }
     }
@@ -448,7 +512,7 @@ fun OrderPlacedScreen(onTrack: (String) -> Unit, onOrders: () -> Unit, onShop: (
                     FText("Order ${o.id.take(8).uppercase()}", variant = TextVariant.Label)
                     val status = statuses[o.id] ?: o.status
                     FText(stageText(status), variant = TextVariant.Caption)
-                    orderNextStep(status)?.let { FText(it, variant = TextVariant.Caption, color = FarmColors.TextLabel) }
+                    orderNextStep(status, o.deliveryMode, o.batchAt)?.let { FText(it, variant = TextVariant.Caption, color = FarmColors.TextLabel) }
                     o.items.forEach { FText("${it.name} · ${formatQty(it.qty)} ${it.unit}", variant = TextVariant.Caption) }
                     FText("Total ${formatRupees(o.total)}", variant = TextVariant.Label, modifier = Modifier.padding(vertical = 6.dp))
                     FarmButton("Track delivery", { onTrack(o.id) }, Modifier.fillMaxWidth(), variant = ButtonVariant.Secondary)

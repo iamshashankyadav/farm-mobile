@@ -156,6 +156,20 @@ fun formatDate(iso: String): String = runCatching {
     d.format(DateTimeFormatter.ofPattern("d MMM yyyy", IN))
 }.getOrDefault(iso)
 
+/** When a shared-delivery batch runs, in words: "today 10:00 am", "tomorrow 10:00 am" or "Fri, 28 Nov, 10:00 am" (India time). */
+fun batchWhen(iso: String, now: Instant = Instant.now()): String? {
+    val at = parseInstant(iso)?.atZone(INDIA) ?: return null
+    val time = at.format(DateTimeFormatter.ofPattern("h:mm a", IN)).lowercase()
+    val today = now.atZone(INDIA).toLocalDate()
+    return when (at.toLocalDate()) {
+        today -> "today $time"
+        today.plusDays(1) -> "tomorrow $time"
+        else -> at.format(DateTimeFormatter.ofPattern("EEE, d MMM", IN)) + ", $time"
+    }
+}
+
+private val INDIA: ZoneId = ZoneId.of("Asia/Kolkata")
+
 fun formatDateTime(iso: String): String = parseInstant(iso)?.atZone(ZoneId.systemDefault())
     ?.format(DateTimeFormatter.ofPattern("d MMM, hh:mm a", IN)) ?: iso
 

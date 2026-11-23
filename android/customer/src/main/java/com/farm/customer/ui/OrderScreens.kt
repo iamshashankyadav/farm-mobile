@@ -280,7 +280,7 @@ private fun OrderCard(order: OrderSummary, onClick: () -> Unit) {
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
                 FText(orderTitle(order.orderType, order.harvestOption), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = FarmColors.TextDark)
-                FText("${shortId(order.id)} · Placed ${formatDate(order.createdAt)}", variant = TextVariant.Caption)
+                FText("${shortId(order.id)} · Placed ${formatDate(order.createdAt)}" + if (order.deliveryMode == "FLEXIBLE") " · Shared delivery" else "", variant = TextVariant.Caption)
             }
             Text(rupees(order.total), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = FarmColors.Primary)
         }
@@ -293,7 +293,7 @@ private fun OrderCard(order: OrderSummary, onClick: () -> Unit) {
             }
         } else {
             StatusRail(railStage(order.status), stageText(order.status))
-            orderNextStep(order.status)?.let { FText(it, variant = TextVariant.Caption, modifier = Modifier.padding(top = 2.dp)) }
+            orderNextStep(order.status, order.deliveryMode, order.batchAt)?.let { FText(it, variant = TextVariant.Caption, modifier = Modifier.padding(top = 2.dp)) }
         }
     }
 }
@@ -393,12 +393,12 @@ fun OrderDetailScreen(orderId: String, onBack: () -> Unit, onHome: () -> Unit, o
                             Column(Modifier.weight(1f)) {
                                 FText("${orderTitle(order.orderType, order.harvestOption)} ${shortId(order.id)}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = FarmColors.TextDark)
                                 FText("Placed ${formatDateTime(order.createdAt)}", variant = TextVariant.Caption)
-                                order.deliveryDate?.let { FText("Delivery by ${formatDate(it)}", variant = TextVariant.Caption) }
+                                order.deliveryDate?.let { FText("Delivery by ${formatDate(it)}" + if (order.deliveryMode == "FLEXIBLE") " · Shared delivery" else "", variant = TextVariant.Caption) }
                             }
                             Text(rupees(order.total), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = FarmColors.Primary)
                         }
                         if (order.status != "CANCELLED") StatusRail(stage, stageText(order.status), Modifier.padding(top = 12.dp))
-                        orderNextStep(order.status)?.let { FText(it, variant = TextVariant.Caption, color = FarmColors.TextLabel, modifier = Modifier.padding(top = 4.dp)) }
+                        orderNextStep(order.status, order.deliveryMode, order.batchAt)?.let { FText(it, variant = TextVariant.Caption, color = FarmColors.TextLabel, modifier = Modifier.padding(top = 4.dp)) }
                         Column(Modifier.padding(top = 10.dp)) {
                             order.items.forEach { LineRow("${it.name}  ×${qtyText(it.qty)} ${it.unit}", rupees(it.lineTotal)) }
                             if (order.deliveryFee > 0) LineRow("Delivery", rupees(order.deliveryFee))
