@@ -3,6 +3,8 @@ package com.farm.customer.checkout
 import com.farm.core.api.Checkout
 import com.farm.core.api.CheckoutRequest
 import com.farm.core.api.DeliveryAddress
+import com.farm.core.api.DeliveryOption
+import com.farm.core.api.DeliveryOptions
 import com.farm.core.api.GeoPoint
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -42,9 +44,15 @@ class CheckoutTest {
     private class FakeApi(var placeResults: MutableList<ApiResult<Checkout>>) : CheckoutApi {
         var intents = 0
         val keys = mutableListOf<String>()
-        override suspend fun createPaymentIntent(amount: Double): ApiResult<String> = ApiResult.Ok("pi-${++intents}")
+        val amounts = mutableListOf<Double>()
+        val modes = mutableListOf<String>()
+        override suspend fun createPaymentIntent(amount: Double): ApiResult<String> {
+            amounts += amount
+            return ApiResult.Ok("pi-${++intents}")
+        }
         override suspend fun placeOrder(key: String, body: CheckoutRequest): ApiResult<Checkout> {
             keys += key
+            modes += body.deliveryMode
             return placeResults.removeAt(0)
         }
     }
@@ -89,5 +97,44 @@ class CheckoutTest {
         val ok = validateAddress(AddressForm(line1 = "1 Road", city = "Durg", pincode = "491001"))
         assertTrue(ok is AddressResult.Ok)
         assertEquals(listOf(75.7873, 26.9124), (ok as AddressResult.Ok).value.location.coordinates)
+    }
+
+    @Test
+    fun aSharedDeliveryOrderCarriesItsModeAndPaysTheLowerFee() = runBlocking {
+        val api = FakeApi(mutableListOf(ApiResult.Ok(Checkout("c1")), ApiResult.Ok(Checkout("c2"))))
+        val session = CheckoutSession(api, DELIVERY_FEE_PER_ORDER)
+        val cart = Cart().add(tomato).add(onion) // 2 farms, items 73.0
+        session.submit(cart, address, null) // deliver now
+        session.submit(cart, address, null, MODE_FLEXIBLE, DELIVERY_FEE_FLEXIBLE)
+        assertEquals(listOf(MODE_IMMEDIATE, MODE_FLEXIBLE), api.modes)
+        assertEquals(listOf(113.0, 93.0), api.amounts) // 73 + 2 x 20, then 73 + 2 x 10
+    }
+
+    @Test
+    fun switchingTheDeliveryModeStartsANewAttempt() = runBlocking {
+        val api = FakeApi(mutableListOf(ApiResult.Err(networkError), ApiResult.Ok(Checkout("c1"))))
+        var n = 0
+        val session = CheckoutSession(api, 20.0) { "key-${++n}" }
+        val cart = Cart().add(tomato)
+        session.submit(cart, address, null) // network error: the attempt is kept
+        session.submit(cart, address, null, MODE_FLEXIBLE, 10.0) // other mode: other fee, so a new intent and key
+        assertEquals(listOf("key-1", "key-2"), api.keys)
+        assertEquals(2, api.intents)
+    }
+
+    @Test
+    fun feesComeFromTheServerWhenKnownAndFromTheFallbackOtherwise() {
+        assertEquals(20.0, feeFor(MODE_IMMEDIATE), 0.0)
+        assertEquals(10.0, feeFor(MODE_FLEXIBLE), 0.0)
+        val options = DeliveryOptions(listOf(DeliveryOption(MODE_IMMEDIATE, 25.0), DeliveryOption(MODE_FLEXIBLE, 5.0)))
+        assertEquals(25.0, feeFor(MODE_IMMEDIATE, options), 0.0)
+        assertEquals(5.0, feeFor(MODE_FLEXIBLE, options), 0.0)
+    }
+
+    @Test
+    fun theBatchTimeIsWrittenOnA12HourClock() {
+        assertEquals("10:00 am", clock12("10:00"))
+        assertEquals("12:30 am", clock12("00:30"))
+        assertEquals("3:05 pm", clock12("15:05"))
     }
 }

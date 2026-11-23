@@ -349,6 +349,8 @@ data class CheckoutRequest(
     val deliveryDate: String? = null,
     val paymentIntentId: String,
     val notes: String? = null,
+    /** IMMEDIATE (route as soon as it is packed) or FLEXIBLE (waits for the daily shared-delivery batch, cheaper). */
+    val deliveryMode: String = "IMMEDIATE",
 )
 
 @Serializable
@@ -379,6 +381,10 @@ data class Order(
     val currency: String = "INR",
     val deliveryAddress: DeliveryAddress? = null,
     val deliveryDate: String? = null,
+    /** IMMEDIATE or FLEXIBLE: a FLEXIBLE order waits for the daily shared-delivery batch. */
+    val deliveryMode: String = "IMMEDIATE",
+    /** FLEXIBLE orders not on a route yet: when the next batch that can take them runs (an estimate). */
+    val batchAt: String? = null,
     val createdAt: String = "",
     val updatedAt: String = "",
 )
@@ -429,6 +435,10 @@ data class OrderDetail(
     val currency: String = "INR",
     val deliveryAddress: DeliveryAddress? = null,
     val deliveryDate: String? = null,
+    /** IMMEDIATE or FLEXIBLE: a FLEXIBLE order waits for the daily shared-delivery batch. */
+    val deliveryMode: String = "IMMEDIATE",
+    /** FLEXIBLE orders not on a route yet: when the next batch that can take them runs (an estimate). */
+    val batchAt: String? = null,
     val createdAt: String = "",
     val updatedAt: String = "",
     val events: List<OrderEvent> = emptyList(),
@@ -449,6 +459,8 @@ data class OrderSummary(
     val itemCount: Int = 0,
     val total: Double = 0.0,
     val currency: String = "INR",
+    val deliveryMode: String = "IMMEDIATE",
+    val batchAt: String? = null,
     val createdAt: String = "",
     val updatedAt: String = "",
 )
@@ -476,6 +488,19 @@ data class HarvestOrderChoice(
     val option: String, // DELIVERY or BUYBACK
     val deliveryAddress: DeliveryAddress? = null,
     val deliveryDate: String? = null,
+)
+
+/** One choice of GET /order/orders/delivery-options. */
+@Serializable
+data class DeliveryOption(val mode: String, val feePerOrder: Double = 0.0)
+
+/** What the customer can choose at checkout: the fee of each delivery mode and when the shared batch runs. */
+@Serializable
+data class DeliveryOptions(
+    val options: List<DeliveryOption> = emptyList(),
+    /** Local time of the daily shared-delivery batch, "HH:MM". */
+    val batchTime: String = "10:00",
+    val nextBatchAt: String? = null,
 )
 
 @Serializable
