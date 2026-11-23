@@ -96,10 +96,10 @@ data class StageLabel(val label: String, val icon: String)
 
 /** The farmer's crop update stages (land CropUpdateCreate: SOWN, GROWING, FLOWERING). */
 fun cropStageLabel(stage: String): StageLabel = when (stage) {
-    "SOWN" -> StageLabel("Sown", "🌱")
-    "GROWING" -> StageLabel("Growing", "🌿")
-    "FLOWERING" -> StageLabel("Flowering", "🌸")
-    else -> StageLabel(stage.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }, "📍")
+    "SOWN" -> StageLabel("Sown", "SOWN")
+    "GROWING" -> StageLabel("Growing", "GROWING")
+    "FLOWERING" -> StageLabel("Flowering", "FLOWERING")
+    else -> StageLabel(stage.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }, "OTHER")
 }
 
 /** "wheat" -> "Wheat", "green_chilli" -> "Green chilli". */

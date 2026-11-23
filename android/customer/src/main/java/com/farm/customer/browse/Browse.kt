@@ -167,7 +167,7 @@ fun photoVerification(photo: ProducePhoto?): PhotoVerification {
     }
     if (photo.isGeoVerified) {
         val dist = photo.distanceM?.let { " (${formatDistance(it)} from farm centroid)" } ?: ""
-        return PhotoVerification(true, "✓ Verified Farm Photo", "✓ Verified", "#E3F1E9", "#155C3A", "#1D7A4D", "GPS verified: Photo taken at the farm location$dist")
+        return PhotoVerification(true, "Verified Farm Photo", "Verified", "#E3F1E9", "#155C3A", "#1D7A4D", "GPS verified: Photo taken at the farm location$dist")
     }
     val desc = when {
         photo.geoStatus == "TOO_FAR" -> "Photo taken too far from farm location" +
@@ -176,12 +176,7 @@ fun photoVerification(photo: ProducePhoto?): PhotoVerification {
         photo.rejectReason != null -> photo.rejectReason
         else -> "Photo could not be verified at farm coordinates"
     }
-    return PhotoVerification(false, "⚠ Unverified Photo", "⚠ Unverified", "#FBEAE7", "#C2412D", "#C2412D", desc)
-}
-
-fun cropEmoji(cropId: String): String = when (cropId) {
-    "tomato" -> "🍅"; "spinach" -> "🥬"; "onion" -> "🧅"; "potato" -> "🥔"; "mango" -> "🥭"; "okra" -> "🌿"; "carrot" -> "🥕"
-    else -> "🥕"
+    return PhotoVerification(false, "Unverified Photo", "Unverified", "#FBEAE7", "#C2412D", "#C2412D", desc)
 }
 
 // ─── Data: the catalog service only. A failed call throws; nothing is invented. ─────────────
