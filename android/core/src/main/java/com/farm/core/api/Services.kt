@@ -21,7 +21,6 @@ object CatalogApi {
         crop: String? = null,
         minPrice: Double? = null,
         maxPrice: Double? = null,
-        grade: String? = null,
         organic: Boolean? = null,
         sort: String? = null,
         limit: Int? = null,
@@ -31,7 +30,7 @@ object CatalogApi {
             "/catalog/listings/search",
             linkedMapOf(
                 "lat" to lat, "lng" to lng, "radius_km" to radiusKm, "crop" to crop,
-                "min_price" to minPrice, "max_price" to maxPrice, "grade" to grade, "organic" to organic,
+                "min_price" to minPrice, "max_price" to maxPrice, "organic" to organic,
                 "sort" to sort, "limit" to limit, "cursor" to cursor,
             ),
         )
@@ -283,7 +282,7 @@ object OrderApi {
         return res.decode()
     }
 
-    /** Cancel an order (allowed until QC_PASSED); the server records the refund. Returns the raw result. */
+    /** Cancel an order (allowed until it is packed); the server records the refund. Returns the raw result. */
     suspend fun cancelOrder(orderId: String): HttpResult =
         Http.post("/order/orders/${Http.enc(orderId)}/cancel", "{}")
 

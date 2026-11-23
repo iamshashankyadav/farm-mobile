@@ -15,12 +15,15 @@ import java.time.Instant
 /** Reservation rail, deposit rules and crop timeline helpers (#42). */
 class ReservationTest {
     @Test
-    fun railFollowsTheFiveLiveStatuses() {
+    fun railFollowsTheSixStatuses() {
         assertEquals(1, reservationStage("PENDING"))
         assertEquals(2, reservationStage("ACCEPTED"))
         assertEquals(3, reservationStage("ACTIVE"))
         assertEquals(4, reservationStage("HARVEST_READY"))
         assertEquals(5, reservationStage("FULFILLING"))
+        assertEquals(6, reservationStage("COMPLETED"))
+        assertEquals("Harvested. Your harvest order is being prepared.", nextStepText("HARVEST_READY", null))
+        assertEquals("Your harvest is ready: choose delivery or buy-back.", nextStepText("FULFILLING", null))
         listOf("REJECTED", "CANCELLED", "EXPIRED").forEach {
             assertEquals(0, reservationStage(it))
             assertTrue(isClosed(it))

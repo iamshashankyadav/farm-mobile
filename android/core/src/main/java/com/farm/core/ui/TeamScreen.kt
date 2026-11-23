@@ -58,7 +58,7 @@ val teams = listOf(
     ),
     TeamSection(
         "Team 2 · Website",
-        "Farmer, customer, inspector and admin website (React).",
+        "Farmer, customer and admin website (React).",
         listOf(
             TeamMember("Lakshay", "lakshayg2005", "Team lead", "Backend skeleton, identity, CI, gateway, data seeder, website login, land search and reservations, admin and inspector pages"),
             TeamMember("Rohit", "rohitraghuwanshi07", "Member", "Land and quality services, farmer plot drawing page"),

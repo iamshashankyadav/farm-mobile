@@ -42,7 +42,6 @@ data class ProduceListing(
     val pricePerUnit: Double,
     val qtyAvailable: Double,
     val harvestDate: String,
-    val grade: String? = null,
     val isOrganic: Boolean = false,
     val description: String? = null,
     val distanceM: Double = 0.0,
@@ -73,8 +72,6 @@ data class FilterState(
     val crop: String? = null,
     val radiusKm: Int = 15,
     val organicOnly: Boolean = false,
-    /** Minimum grade: "B" returns A and B. "ALL" sends nothing. */
-    val minGrade: String = "ALL",
     val minPrice: Double? = null,
     val maxPrice: Double? = null,
     val sort: SortOption = SortOption.DISTANCE,
@@ -158,15 +155,6 @@ fun formatHarvestDate(date: String): String = runCatching {
     "${d.dayOfMonth} ${MONTHS[d.monthValue - 1]} ${d.year}"
 }.getOrDefault(date)
 
-data class GradeMeta(val label: String, val bg: String, val fg: String, val description: String)
-
-fun gradeMeta(grade: String?): GradeMeta = when (grade) {
-    "A" -> GradeMeta("Grade A", "#E3F1E9", "#155C3A", "Premium quality - highest size, uniformity and freshness standard")
-    "B" -> GradeMeta("Grade B", "#E8EEFB", "#2F5FD0", "Standard quality - fresh and nutritious with minor cosmetic variation")
-    "C" -> GradeMeta("Grade C", "#FBF3E6", "#B7791F", "Commercial grade - great for cooking, preserves and juices")
-    else -> GradeMeta("Ungraded", "#E6E9EB", "#4B5258", "Quality inspection pending")
-}
-
 data class PhotoVerification(
     val isVerified: Boolean, val label: String, val shortLabel: String,
     val bg: String, val fg: String, val border: String, val description: String,
@@ -208,7 +196,7 @@ fun ListingFeature.toListing(fallback: List<Double>): ProduceListing {
     return ProduceListing(
         id = p.id, farmId = p.farmId, farmName = p.farmName, farmerId = p.farmerId, cropId = p.cropId,
         cropName = p.cropName, variety = p.variety, unit = p.unit, pricePerUnit = p.pricePerUnit,
-        qtyAvailable = p.qtyAvailable, harvestDate = p.harvestDate, grade = p.grade, isOrganic = p.isOrganic,
+        qtyAvailable = p.qtyAvailable, harvestDate = p.harvestDate, isOrganic = p.isOrganic,
         description = p.description, distanceM = p.distanceM, district = p.district, village = p.village,
         status = p.status, pickupCoordinates = coords, mediaIds = p.mediaIds,
         farmRating = p.farmRating, farmRatingCount = p.farmRatingCount,
@@ -233,7 +221,6 @@ object BrowseRepository {
             crop = f.crop?.takeIf { it != "ALL" },
             minPrice = f.minPrice?.takeIf { it > 0 },
             maxPrice = f.maxPrice?.takeIf { it > 0 },
-            grade = f.minGrade.takeIf { it != "ALL" },
             organic = if (f.organicOnly) true else null,
             sort = f.sort.api,
             limit = LISTING_PAGE_SIZE,
@@ -256,7 +243,7 @@ object BrowseRepository {
         ProduceListing(
             id = out.id, farmId = out.farmId, farmName = out.farmName, farmerId = out.farmerId, cropId = out.cropId,
             cropName = out.cropName, variety = out.variety, unit = out.unit, pricePerUnit = out.pricePerUnit,
-            qtyAvailable = out.qtyAvailable, harvestDate = out.harvestDate, grade = out.grade, isOrganic = out.isOrganic,
+            qtyAvailable = out.qtyAvailable, harvestDate = out.harvestDate, isOrganic = out.isOrganic,
             description = out.description, distanceM = 0.0, district = out.district, village = out.village,
             status = out.status, pickupCoordinates = out.pickupLocation?.coordinates ?: listOf(0.0, 0.0),
             mediaIds = out.mediaIds, photos = photos, farmRating = out.farmRating, farmRatingCount = out.farmRatingCount,

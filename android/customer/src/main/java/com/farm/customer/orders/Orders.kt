@@ -28,9 +28,8 @@ val STATUS_META = mapOf(
     "PLACED" to StatusMeta("Order Placed", "#2F5FD0", "#E8EEFB", "🧾"),
     "CONFIRMED" to StatusMeta("Confirmed", "#2F5FD0", "#E8EEFB", "✅"),
     "PACKED" to StatusMeta("Packed", "#B7791F", "#FBF3E6", "📦"),
-    "QC_PASSED" to StatusMeta("Quality Checked", "#B7791F", "#FBF3E6", "🔎"),
-    "READY_FOR_DISPATCH" to StatusMeta("Ready to Dispatch", "#B7791F", "#FBF3E6", "🚜"),
-    "POOLED" to StatusMeta("Ready to Dispatch", "#B7791F", "#FBF3E6", "🚜"),
+    "READY_FOR_DISPATCH" to StatusMeta("Packed", "#B7791F", "#FBF3E6", "📦"),
+    "POOLED" to StatusMeta("On a route", "#B7791F", "#FBF3E6", "🚜"),
     "IN_TRANSIT" to StatusMeta("Out for Delivery", "#1D7A4D", "#E3F1E9", "🚚"),
     "DELIVERED" to StatusMeta("Delivered", "#1D7A4D", "#E3F1E9", "🎉"),
     "COMPLETED" to StatusMeta("Delivered", "#1D7A4D", "#E3F1E9", "🎉"),
@@ -39,38 +38,38 @@ val STATUS_META = mapOf(
 
 fun statusMeta(status: String) = STATUS_META[status] ?: StatusMeta(status.replace('_', ' '), "#4B5258", "#E6E9EB", "📍")
 
-// ─── Status rail (same eight stages as the website's StatusRail) ────────────────
+// ─── Status rail (same six stages as the website's StatusRail) ──────────────────
 
 /** One stage of the rail: the status that reaches it, its label and who acts at that step. */
 data class RailStage(val status: String, val label: String, val actor: String)
 
-/** The eight stages; COMPLETED shares the last one with DELIVERED. */
+/**
+ * The six stages (there is no quality check any more: the customer's rating is the quality
+ * signal). READY_FOR_DISPATCH shares Packed; COMPLETED shares Delivered.
+ */
 val RAIL_STAGES = listOf(
     RailStage("PLACED", "Placed", "You"),
     RailStage("CONFIRMED", "Confirmed", "Payment"),
     RailStage("PACKED", "Packed", "Farmer"),
-    RailStage("QC_PASSED", "Graded", "Quality check"),
-    RailStage("READY_FOR_DISPATCH", "Ready for dispatch", "System"),
-    RailStage("POOLED", "Pooled", "System"),
+    RailStage("POOLED", "On a route", "System"),
     RailStage("IN_TRANSIT", "In transit", "Delivery partner"),
     RailStage("DELIVERED", "Delivered", "Delivery partner"),
 )
 
 private val STAGE_OF = mapOf(
-    "PLACED" to 1, "CONFIRMED" to 2, "PACKED" to 3, "QC_PASSED" to 4, "READY_FOR_DISPATCH" to 5,
-    "POOLED" to 6, "IN_TRANSIT" to 7, "DELIVERED" to 8, "COMPLETED" to 8,
+    "PLACED" to 1, "CONFIRMED" to 2, "PACKED" to 3, "READY_FOR_DISPATCH" to 3,
+    "POOLED" to 4, "IN_TRANSIT" to 5, "DELIVERED" to 6, "COMPLETED" to 6,
 )
 
-/** How many of the eight stages are done: 0 for a cancelled (or unknown) status. */
+/** How many of the six stages are done: 0 for a cancelled (or unknown) status. */
 fun railStage(status: String): Int = STAGE_OF[status] ?: 0
 
 /** The line under the rail: where the order is now, in the customer's words. */
 fun stageText(status: String): String = when (status) {
     "PLACED" -> "Placed, waiting for payment"
     "CONFIRMED" -> "Confirmed, waiting for the farmer to pack it"
-    "PACKED" -> "Packed, waiting for the quality check"
-    "QC_PASSED" -> "Graded, getting ready for dispatch"
-    "READY_FOR_DISPATCH" -> "Ready for dispatch, waiting for a delivery route"
+    "PACKED" -> "Packed, waiting for a delivery partner"
+    "READY_FOR_DISPATCH" -> "Packed, waiting for a delivery route"
     "POOLED" -> "On a delivery route, waiting for pickup"
     "IN_TRANSIT" -> "On its way to you"
     "DELIVERED" -> "Delivered"
@@ -87,12 +86,16 @@ fun stageTimes(events: List<OrderEvent>): List<String?> {
     val first = mutableMapOf<String, String>()
     events.sortedBy { parseInstant(it.occurredAt) ?: Instant.EPOCH }.forEach { e -> first.putIfAbsent(e.status, e.occurredAt) }
     return RAIL_STAGES.map { stage ->
-        first[stage.status] ?: if (stage.status == "DELIVERED") first["COMPLETED"] else null
+        first[stage.status] ?: when (stage.status) {
+            "DELIVERED" -> first["COMPLETED"]
+            "PACKED" -> first["READY_FOR_DISPATCH"]
+            else -> null
+        }
     }
 }
 
-/** The order service lets the customer cancel until the quality check has passed (not after dispatch). */
-private val CANCELLABLE = setOf("PLACED", "CONFIRMED", "PACKED", "QC_PASSED")
+/** The order service lets the customer cancel until the order is packed (PLACED, CONFIRMED, PACKED). */
+private val CANCELLABLE = setOf("PLACED", "CONFIRMED", "PACKED")
 
 fun canCancel(status: String): Boolean = status in CANCELLABLE
 
@@ -242,7 +245,7 @@ fun project(points: List<Pair<String, LatLng>>, width: Float, height: Float, pad
 
 enum class HarvestStage(val text: String) {
     NOT_READY("Your harvest is being checked by an inspector. You can choose here once it passes."),
-    CHOOSE("Your harvest passed the quality check. Choose what happens next."),
+    CHOOSE("Your harvest is ready. Choose what happens next."),
     DELIVERY("Your harvest is on its way to you."),
     COMPLETED("All done."),
     CANCELLED("This harvest order was cancelled and your deposit refunded."),
@@ -268,6 +271,22 @@ fun summarise(subtotal: Double, deliveryFee: Double, balanceDue: Double, payment
     return HarvestSummary(subtotal, deliveryFee, sum("DEPOSIT"), sum("BALANCE"), balanceDue, sum("REFUND"))
 }
 
+/** What each harvest choice costs, from the harvest order (GET /order/orders/{id}). */
+data class HarvestCosts(
+    /** DELIVERY: paid when it arrives (balance plus the delivery fee). */
+    val deliveryPayOnArrival: Double,
+    /** BUYBACK: the balance, paid now. */
+    val buybackPayNow: Double,
+    /** BUYBACK: credited at once, 90 % of the order total. */
+    val buybackCredit: Double,
+)
+
+fun harvestCosts(total: Double, balanceDue: Double, deliveryFee: Double, flatFee: Double = 20.0): HarvestCosts {
+    fun r2(v: Double) = Math.round(v * 100) / 100.0
+    val fee = if (deliveryFee > 0) deliveryFee else flatFee
+    return HarvestCosts(r2(balanceDue + fee), r2(balanceDue), r2(total * 0.9))
+}
+
 /** Delivery dates the customer can pick: tomorrow and the next two days. */
 fun deliveryDates(today: LocalDate = LocalDate.now(), count: Int = 3): List<String> =
     (1..count).map { today.plusDays(it.toLong()).toString() }
@@ -275,7 +294,8 @@ fun deliveryDates(today: LocalDate = LocalDate.now(), count: Int = 3): List<Stri
 data class ChoiceError(val message: String, val refresh: Boolean)
 
 private val CHOICE_ERRORS = mapOf(
-    "HARVEST_NOT_READY" to ChoiceError("The harvest has not passed the quality check yet.", true),
+    "HARVEST_NOT_READY" to ChoiceError("The harvest is not ready yet.", true),
+    "BALANCE_PAYMENT_FAILED" to ChoiceError("Your balance payment was declined. Nothing was taken; try again.", false),
     "HARVEST_OPTION_CHOSEN" to ChoiceError("You already chose an option for this harvest.", true),
     "HARVEST_ORDER_CLOSED" to ChoiceError("This harvest order is closed.", true),
     "RESERVATION_NOT_FOUND" to ChoiceError("Reservation not found.", false),

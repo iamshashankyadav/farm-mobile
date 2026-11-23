@@ -14,6 +14,7 @@ val RESERVATION_STAGES = listOf(
     "ACTIVE" to "Active",
     "HARVEST_READY" to "Harvest ready",
     "FULFILLING" to "Fulfilling",
+    "COMPLETED" to "Completed",
 )
 
 /** How many stages are done; 0 for REJECTED, CANCELLED, EXPIRED or an unknown status. */
@@ -35,8 +36,9 @@ fun nextStepText(status: String, expiresAt: String?, now: Instant = Instant.now(
     }
     "ACCEPTED" -> "The farmer accepted. Pay the deposit to confirm your season."
     "ACTIVE" -> "Your crop is growing. The farmer posts updates with photos below."
-    "HARVEST_READY" -> "The harvest is ready and waiting for its quality check."
-    "FULFILLING" -> "The harvest passed its quality check. Choose delivery or buy-back."
+    "HARVEST_READY" -> "Harvested. Your harvest order is being prepared."
+    "FULFILLING" -> "Your harvest is ready: choose delivery or buy-back."
+    "COMPLETED" -> "Completed."
     "REJECTED" -> "The farmer turned this request down. Nothing was charged."
     "CANCELLED" -> "This reservation was cancelled. A paid deposit is refunded."
     "EXPIRED" -> "The farmer did not answer in 48 hours, so the request expired."

@@ -83,7 +83,6 @@ import com.farm.customer.browse.BrowseRepository
 import com.farm.customer.browse.ProduceListing
 import com.farm.customer.browse.formatDistance
 import com.farm.customer.browse.formatHarvestDate
-import com.farm.customer.browse.gradeMeta
 import com.farm.customer.checkout.AddressForm
 import com.farm.customer.checkout.AddressResult
 import com.farm.customer.checkout.ApiResult
@@ -135,7 +134,6 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
         return
     }
     val photo = l.photos.firstOrNull()
-    val grade = gradeMeta(l.grade)
     val inCart = cart.items.any { it.listingId == l.id }
 
     Column(Modifier.fillMaxSize().background(FarmColors.Background)) {
@@ -170,7 +168,6 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
                         FText(l.cropName, variant = TextVariant.H1, fontSize = 26.sp)
                         l.variety?.let { FText("Variety: $it", color = FarmColors.TextLabel) }
                     }
-                    if (l.grade != null) Pill(grade.label, hex(grade.bg), hex(grade.fg), fontSize = 12)
                 }
                 Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(formatRupees(l.pricePerUnit), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = FarmColors.PrimaryDark)
@@ -179,10 +176,8 @@ fun ListingDetailScreen(listingId: String, onBack: () -> Unit, onCart: () -> Uni
                     Pill("${qtyText(l.qtyAvailable)} ${l.unit} in stock", FarmColors.PrimaryLight, FarmColors.Primary)
                 }
                 l.description?.let { FText(it, color = FarmColors.TextBody, modifier = Modifier.padding(top = 10.dp)) }
-                Text(
-                    "🔍 ${grade.description}", fontSize = 12.sp, color = hex(grade.fg),
-                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(hex(grade.bg)).padding(10.dp),
-                )
+                // The customers' rating of the farm is the quality signal (there is no grading step).
+                FarmRatingText(l.farmRating, l.farmRatingCount, Modifier.padding(top = 10.dp))
             }
             FarmCard(Modifier.fillMaxWidth()) {
                 FText("Farm & Origin", variant = TextVariant.H2, fontSize = 18.sp)

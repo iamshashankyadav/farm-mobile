@@ -202,7 +202,7 @@ fun wrongRoleMessage(requiredRole: String, roles: List<String>): String {
     val where = when {
         "delivery" in roles -> "the delivery app"
         "customer" in roles -> "the customer app"
-        roles.any { it in setOf("farmer", "admin", "inspector") } -> "the website"
+        roles.any { it in setOf("farmer", "admin") } -> "the website"
         else -> null
     }
     val needed = if (requiredRole == "delivery") "a delivery partner account" else "a $requiredRole account"

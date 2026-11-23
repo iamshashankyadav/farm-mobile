@@ -46,7 +46,7 @@ class ServicesTest {
                 "geometry":{"type":"Point","coordinates":[81.2,21.1]},"properties":{"id":"l1","cropName":"Tomato","farmRating":4.5,"farmRatingCount":2}}]}""",
             ),
         )
-        val page = CatalogApi.searchListings(21.1, 81.2, radiusKm = 25, crop = "tomato", grade = "B", organic = true, sort = "price", limit = 20)
+        val page = CatalogApi.searchListings(21.1, 81.2, radiusKm = 25, crop = "tomato", organic = true, sort = "price", limit = 20)
         assertEquals("n2", page.nextCursor)
         assertEquals(4.5, page.features[0].properties.farmRating!!, 0.0)
         val req = server.takeRequest()
@@ -54,7 +54,7 @@ class ServicesTest {
         assertEquals("/api/v1/catalog/listings/search", url.encodedPath)
         assertEquals("25", url.queryParameter("radius_km"))
         assertEquals("tomato", url.queryParameter("crop"))
-        assertEquals("B", url.queryParameter("grade"))
+        assertEquals(null, url.queryParameter("grade"))
         assertEquals("true", url.queryParameter("organic"))
         assertNull(url.queryParameter("cursor"))
         assertEquals("Bearer token-1", req.getHeader("Authorization"))
@@ -105,7 +105,7 @@ class ServicesTest {
 
     @Test
     fun wrongOtpShowsTheServersMessage() = runBlocking {
-        server.enqueue(json(400, envelope("INVALID_OTP", "The delivery code is wrong")))
+        server.enqueue(json(422, envelope("INVALID_OTP", "The delivery code is wrong")))
         val result = load { LogisticsApi.submitDelivery("s1", "0000", "m1", null) }
         val e = result.exceptionOrNull() as ApiException
         assertTrue(e.message!!.startsWith("The delivery code is wrong"))
