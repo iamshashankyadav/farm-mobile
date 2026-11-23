@@ -47,6 +47,25 @@ data class MapPin(
     val color: Color = FarmColors.Primary,
 )
 
+/** Key of the "you are here" pin in [TileMap]; tapping it selects nothing. */
+const val ME_PIN_KEY = "__me"
+
+/** The person's own position as a blue pin (title "You are here", or the place they chose). */
+fun mePin(lat: Double, lng: Double, title: String = "You are here") =
+    MapPin(ME_PIN_KEY, lat, lng, title, color = Color(0xFF2F5FD0))
+
+/** A blue "you are here" marker for osmdroid maps that draw their own overlays. */
+fun meMarker(map: MapView, lat: Double, lng: Double, title: String = "You are here"): Marker = Marker(map).apply {
+    position = GeoPoint(lat, lng)
+    this.title = title
+    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+    ContextCompat.getDrawable(map.context, org.osmdroid.library.R.drawable.marker_default)?.mutate()?.let { d ->
+        d.setTint(Color(0xFF2F5FD0).toArgb())
+        icon = d
+    }
+    setOnMarkerClickListener { m, _ -> m.showInfoWindow(); true }
+}
+
 /** osmdroid needs an identifying user agent (OSM tile policy) and a writable cache. */
 fun configureOsm(context: Context) {
     Configuration.getInstance().apply {
@@ -143,7 +162,7 @@ fun TileMap(
                                 icon = d
                             }
                             setOnMarkerClickListener { m, _ ->
-                                select(pin.key)
+                                if (pin.key != ME_PIN_KEY) select(pin.key)
                                 m.showInfoWindow()
                                 true
                             }
