@@ -1,5 +1,25 @@
 package com.farm.delivery
 
+import com.farm.delivery.push.startPush
+
+import com.farm.delivery.push.routeForPush
+
+import com.farm.delivery.push.pushAvailable
+
+import androidx.compose.runtime.mutableStateOf
+
+import androidx.compose.runtime.MutableState
+
+import androidx.compose.runtime.LaunchedEffect
+
+import android.os.Build
+
+import android.content.pm.PackageManager
+
+import android.content.Intent
+
+import android.Manifest
+
 import android.app.Application
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -22,6 +42,7 @@ class FarmDeliveryApp : Application() {
     override fun onCreate() {
         super.onCreate()
         FarmCore.init(this)
+        startPush(this)
     }
 }
 
@@ -29,13 +50,40 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { FarmTheme { DeliveryNav() } }
+        deepLink.value = deepLinkOf(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && pushAvailable(this) &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
+        setContent { FarmTheme { DeliveryNav(deepLink) } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        deepLink.value = deepLinkOf(intent)
+    }
+
+    /** The route a tapped push asks for, consumed once. */
+    private val deepLink = mutableStateOf<String?>(null)
+
+    private fun deepLinkOf(intent: Intent?): String? {
+        val extras = intent?.extras ?: return null
+        val data = extras.keySet().mapNotNull { k -> extras.getString(k)?.let { k to it } }.toMap()
+        return routeForPush(data)
     }
 }
 
 @Composable
-private fun DeliveryNav() {
+private fun DeliveryNav(deepLink: MutableState<String?>) {
     val nav = rememberNavController()
+    val link = deepLink.value
+    LaunchedEffect(link) {
+        if (link != null) {
+            nav.navigate(link)
+            deepLink.value = null
+        }
+    }
     NavHost(nav, startDestination = "home") {
         composable("home") {
             DeliveryHomeScreen(
