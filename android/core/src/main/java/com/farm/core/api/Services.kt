@@ -294,6 +294,13 @@ object OrderApi {
     suspend fun createPaymentIntent(body: PaymentIntentCreate): HttpResult =
         Http.post("/order/orders/payments/intent", Http.encode(body))
 
+    /** The delivery choices at checkout (immediate or shared) with their fees and the batch time. */
+    suspend fun deliveryOptions(): DeliveryOptions {
+        val res = Http.get("/order/orders/delivery-options")
+        if (!res.ok) throw ApiException("Could not load the delivery options (${res.status})", status = res.status)
+        return res.decode()
+    }
+
     suspend fun placeOrder(idempotencyKey: String, body: CheckoutRequest): HttpResult =
         Http.post("/order/orders", Http.encode(body), mapOf("Idempotency-Key" to idempotencyKey))
 

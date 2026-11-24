@@ -64,8 +64,25 @@ suspend fun reorder(items: List<OrderItem>): ReorderResult = coroutineScope {
 fun canReorder(orderType: String?, items: List<OrderItem>): Boolean =
     orderType != "HARVEST" && items.any { it.listingId != null }
 
-/** "What happens next" under an order's rail, in the customer's words. */
-fun orderNextStep(status: String): String? = when (status) {
+/** Before an order is on a route, a FLEXIBLE ("I can wait") order is still waiting for the shared-delivery batch. */
+private val BEFORE_ROUTE = setOf("PLACED", "CONFIRMED", "PACKED", "READY_FOR_DISPATCH")
+
+fun waitsForBatch(status: String, deliveryMode: String): Boolean = deliveryMode == "FLEXIBLE" && status in BEFORE_ROUTE
+
+/**
+ * "What happens next" under an order's rail, in the customer's words. A shared-delivery order that
+ * has not left yet says when its batch runs ([batchAt], an estimate from the server) instead.
+ */
+fun orderNextStep(status: String, deliveryMode: String = "IMMEDIATE", batchAt: String? = null): String? {
+    if (waitsForBatch(status, deliveryMode) && status != "PLACED") {
+        val batch = batchAt?.let { batchWhen(it) }
+        return if (batch != null) "Shared delivery: it leaves in our batch $batch, together with other orders near you."
+        else "Shared delivery: it leaves in the next daily batch, together with other orders near you."
+    }
+    return nextStepLine(status)
+}
+
+private fun nextStepLine(status: String): String? = when (status) {
     "PLACED" -> "Next: your payment is confirmed (a few seconds)."
     "CONFIRMED" -> "Next: the farmer packs your order."
     "PACKED" -> "Next: a delivery partner collects it."
